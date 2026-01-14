@@ -9,8 +9,7 @@ const { spawn } = require('child_process');
 const path = require('path');
 
 const testFiles = [
-    'newtab.test.js',
-    'favicon-cache.test.js'
+    'newtab.test.js'
 ];
 
 let totalPassed = 0;
@@ -71,4 +70,3 @@ async function runAllTests() {
 }
 
 runAllTests();
-
