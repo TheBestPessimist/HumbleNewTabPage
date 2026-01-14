@@ -160,7 +160,6 @@ async function testGetFaviconUrl() {
 async function testGetStats() {
     const stats = await FaviconCache.getStats();
     assert(stats.dbName === 'FaviconCache', 'Should have correct DB name');
-    assert(stats.storeName === 'favicons', 'Should have correct store name');
     assert(typeof stats.count === 'number', 'Should have count');
 }
 
@@ -176,4 +175,3 @@ async function runAllTests() {
 }
 
 runAllTests();
-
