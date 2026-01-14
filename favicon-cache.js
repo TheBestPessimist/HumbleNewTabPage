@@ -23,27 +23,82 @@ var FaviconCache = (function() {
     var DB_VERSION = 1;
     var STORE_NAME = 'favicons';
     var CACHE_EXPIRY_DAYS = 30;
-    
+    var MAX_CONCURRENT_FETCHES = 20; // Limit concurrent network requests
+
     var dbPromise = null;
-    
+    var activeFetches = 0;
+    var fetchQueue = [];
+    var pendingRequests = {}; // Dedup in-flight requests: domainKey -> Promise
+
+    /**
+     * Extract the origin (protocol + domain) from a URL for domain-based caching.
+     * Favicons are typically the same for all pages on a domain.
+     */
+    function getDomainKey(pageUrl, size) {
+        try {
+            var url = new URL(pageUrl);
+            return url.origin + '|' + size;
+        } catch (e) {
+            // If URL parsing fails, fall back to full URL
+            return pageUrl + '|' + size;
+        }
+    }
+
+    /**
+     * Process the fetch queue
+     */
+    function processFetchQueue() {
+        while (fetchQueue.length > 0 && activeFetches < MAX_CONCURRENT_FETCHES) {
+            var item = fetchQueue.shift();
+            activeFetches++;
+            item.execute().finally(function() {
+                activeFetches--;
+                processFetchQueue();
+            });
+        }
+    }
+
+    /**
+     * Queue a fetch operation
+     */
+    function queueFetch(executeFn) {
+        return new Promise(function(resolve, reject) {
+            fetchQueue.push({
+                execute: function() {
+                    return executeFn().then(resolve).catch(reject);
+                }
+            });
+            processFetchQueue();
+        });
+    }
+
     /**
      * Open or create the IndexedDB database
      */
     function openDatabase() {
         if (dbPromise) return dbPromise;
-        
+
         dbPromise = new Promise(function(resolve, reject) {
             var request = indexedDB.open(DB_NAME, DB_VERSION);
-            
+
             request.onerror = function() {
                 console.error('FaviconCache: Failed to open database');
+                dbPromise = null; // Reset so we can retry
                 reject(request.error);
             };
-            
+
             request.onsuccess = function() {
-                resolve(request.result);
+                var db = request.result;
+                // Handle database being closed unexpectedly
+                db.onclose = function() {
+                    dbPromise = null;
+                };
+                db.onerror = function() {
+                    dbPromise = null;
+                };
+                resolve(db);
             };
-            
+
             request.onupgradeneeded = function(event) {
                 var db = event.target.result;
                 if (!db.objectStoreNames.contains(STORE_NAME)) {
@@ -52,7 +107,7 @@ var FaviconCache = (function() {
                 }
             };
         });
-        
+
         return dbPromise;
     }
     
@@ -93,50 +148,78 @@ var FaviconCache = (function() {
     }
     
     /**
-     * Get a favicon from cache, or fetch and cache if not present
+     * Get a favicon from cache, or fetch and cache if not present.
+     * Uses domain-based caching - all URLs from the same domain share one favicon.
      */
     function get(pageUrl, size) {
         size = size || 16;
-        var cacheKey = pageUrl + '|' + size;
-        
-        return openDatabase().then(function(db) {
+        // Use domain-based key for caching and deduplication
+        var domainKey = getDomainKey(pageUrl, size);
+
+        // Deduplicate in-flight requests for the same domain
+        if (pendingRequests[domainKey]) {
+            return pendingRequests[domainKey];
+        }
+
+        var promise = openDatabase().then(function(db) {
             return new Promise(function(resolve, reject) {
-                var transaction = db.transaction([STORE_NAME], 'readonly');
-                var store = transaction.objectStore(STORE_NAME);
-                var request = store.get(cacheKey);
-                
+                var transaction;
+                var store;
+                var request;
+
+                try {
+                    transaction = db.transaction([STORE_NAME], 'readonly');
+                    store = transaction.objectStore(STORE_NAME);
+                    request = store.get(domainKey);
+                } catch (e) {
+                    // Transaction failed (e.g., database closed), fall back to direct URL
+                    resolve(getFaviconUrl(pageUrl, size));
+                    return;
+                }
+
                 request.onsuccess = function() {
                     var cached = request.result;
                     var now = Date.now();
                     var expiryMs = CACHE_EXPIRY_DAYS * 24 * 60 * 60 * 1000;
-                    
+
                     if (cached && (now - cached.timestamp) < expiryMs) {
                         // Cache hit - return cached data URL
                         resolve(cached.dataUrl);
                     } else {
-                        // Cache miss or expired - fetch and cache
-                        fetchFavicon(pageUrl, size)
-                            .then(function(dataUrl) {
-                                // Store in cache (fire and forget)
-                                set(cacheKey, dataUrl).catch(function() {});
-                                resolve(dataUrl);
-                            })
-                            .catch(function() {
-                                // On error, return the direct URL as fallback
-                                resolve(getFaviconUrl(pageUrl, size));
-                            });
+                        // Cache miss or expired - queue fetch to limit concurrency
+                        queueFetch(function() {
+                            return fetchFavicon(pageUrl, size);
+                        }).then(function(dataUrl) {
+                            // Store in cache by domain (fire and forget)
+                            set(domainKey, dataUrl).catch(function() {});
+                            resolve(dataUrl);
+                        }).catch(function() {
+                            // On error, return the direct URL as fallback
+                            resolve(getFaviconUrl(pageUrl, size));
+                        });
                     }
                 };
-                
+
                 request.onerror = function() {
                     // On DB error, fall back to direct URL
+                    resolve(getFaviconUrl(pageUrl, size));
+                };
+
+                transaction.onerror = function() {
+                    // Transaction error, fall back to direct URL
                     resolve(getFaviconUrl(pageUrl, size));
                 };
             });
         }).catch(function() {
             // If DB fails to open, fall back to direct URL
             return getFaviconUrl(pageUrl, size);
+        }).finally(function() {
+            // Clean up pending request for this domain
+            delete pendingRequests[domainKey];
         });
+
+        pendingRequests[domainKey] = promise;
+        return promise;
     }
     
     /**
@@ -263,6 +346,9 @@ var FaviconCache = (function() {
         // Load from cache asynchronously
         get(pageUrl, size).then(function(dataUrl) {
             img.src = dataUrl;
+        }).catch(function() {
+            // On error, fall back to direct favicon URL
+            img.src = getFaviconUrl(pageUrl, size);
         });
 
         return img;
