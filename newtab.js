@@ -11,6 +11,8 @@ const Perf = {
     operations: [], // Detailed operation log
     enabled: true,
     apiCalls: { count: 0, totalTime: 0, calls: [] },
+    firstPaintTime: null,
+    reportPrinted: false,
 
     mark(label) {
         if (!this.enabled) return;
@@ -46,13 +48,28 @@ const Perf = {
         return result;
     },
 
+    // Wait for actual browser paint and then print summary
+    waitForPaintAndReport() {
+        if (!this.enabled || this.reportPrinted) return;
+
+        // Use requestAnimationFrame to wait for next frame, then another to ensure paint
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                this.firstPaintTime = performance.now() - this.startTime;
+                this.mark('FIRST PAINT (bookmarks visible)');
+                this.summary();
+            });
+        });
+    },
+
     summary() {
-        if (!this.enabled) return;
+        if (!this.enabled || this.reportPrinted) return;
+        this.reportPrinted = true;
+
         const totalTime = performance.now() - this.startTime;
 
         // Navigation timing (when did the page actually start loading?)
         const navTiming = performance.getEntriesByType('navigation')[0];
-        const pageLoadStart = navTiming ? navTiming.startTime : 0;
 
         console.log('\n' + '='.repeat(60));
         console.log('PERFORMANCE REPORT - Copy everything below this line');
@@ -60,7 +77,7 @@ const Perf = {
 
         // Summary stats
         console.log('\n📊 SUMMARY:');
-        console.log(`  Total JS execution time: ${totalTime.toFixed(2)}ms`);
+        console.log(`  Total time to first paint: ${this.firstPaintTime?.toFixed(2) || totalTime.toFixed(2)}ms`);
         console.log(`  Chrome API calls: ${this.apiCalls.count} calls, ${this.apiCalls.totalTime.toFixed(2)}ms total`);
         if (navTiming) {
             console.log(`  DOM Content Loaded: ${navTiming.domContentLoadedEventEnd.toFixed(2)}ms`);
@@ -106,9 +123,10 @@ const Perf = {
         if (renderTime > 50) {
             console.log(`  ⚠️  Rendering taking ${renderTime.toFixed(0)}ms`);
         }
-        if (totalTime < 100) {
-            console.log(`  ✅ JS execution is fast (${totalTime.toFixed(0)}ms)`);
-            console.log(`  ℹ️  If page still feels slow, the delay is BEFORE this script runs`);
+        if (this.firstPaintTime && this.firstPaintTime < 100) {
+            console.log(`  ✅ First paint is fast (${this.firstPaintTime.toFixed(0)}ms)`);
+        } else if (this.firstPaintTime) {
+            console.log(`  ❌ First paint is slow (${this.firstPaintTime.toFixed(0)}ms) - target is <25ms`);
         }
 
         console.log('\n' + '='.repeat(60));
@@ -1029,17 +1047,21 @@ async function loadColumns() {
         verifyColumns();
         await renderColumns();
     }
-    Perf.mark('loadColumns end (first paint ready)');
-    Perf.summary();
+    Perf.mark('loadColumns end (DOM ready)');
 
-    // After first paint, expand any deferred folders
-    // Use requestAnimationFrame to ensure browser paints first
+    // Wait for actual browser paint before printing report
+    // This ensures we measure when bookmarks are actually visible
     if (typeof requestAnimationFrame !== 'undefined') {
+        Perf.waitForPaintAndReport();
+
+        // After first paint, expand any deferred folders
         requestAnimationFrame(() => {
             requestAnimationFrame(() => {
                 expandDeferredFolders();
             });
         });
+    } else {
+        Perf.summary();
     }
 }
 
