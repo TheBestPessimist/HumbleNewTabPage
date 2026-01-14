@@ -1,5 +1,147 @@
 'use strict';
 
+// =============================================================================
+// OPTIMIZED BOOKMARK LOADING - Prefetch only visible bookmarks in parallel
+// =============================================================================
+
+// Promise wrappers for Chrome bookmark APIs
+function getBookmarkNodes(ids) {
+	return new Promise(function(resolve) {
+		if (!ids || ids.length === 0) {
+			resolve([]);
+			return;
+		}
+		chrome.bookmarks.get(ids, function(results) {
+			resolve(results || []);
+		});
+	});
+}
+
+function getBookmarkChildren(id) {
+	return new Promise(function(resolve) {
+		chrome.bookmarks.getChildren(id, function(results) {
+			resolve(results || []);
+		});
+	});
+}
+
+function getBookmarkTree() {
+	return new Promise(function(resolve) {
+		chrome.bookmarks.getTree(function(results) {
+			resolve(results || []);
+		});
+	});
+}
+
+// Cache for prefetched bookmark data
+var prefetchedData = {
+	nodes: {},      // id -> node data
+	children: {}    // id -> array of child nodes
+};
+
+// Get all open folder IDs from localStorage
+function getOpenFolderIds() {
+	var openIds = [];
+	for (var i = 0; i < localStorage.length; i++) {
+		var key = localStorage.key(i);
+		if (key && key.indexOf('open.') === 0) {
+			openIds.push(key.substring(5));
+		}
+	}
+	return openIds;
+}
+
+// Get all column root IDs from localStorage
+function getColumnIds() {
+	var columnIds = [];
+	for (var x = 0; ; x++) {
+		for (var y = 0; ; y++) {
+			var id = localStorage.getItem('column.' + x + '.' + y);
+			if (id) {
+				columnIds.push(id);
+			} else {
+				break;
+			}
+		}
+		if (y === 0) break;
+	}
+	return columnIds;
+}
+
+// Prefetch all visible bookmark data in parallel
+function prefetchVisibleBookmarks() {
+	var columnIds = getColumnIds();
+	var openIds = getOpenFolderIds();
+
+	// Combine all IDs that need children fetched
+	// Column roots need children, open folders need children
+	var allIds = columnIds.concat(openIds);
+
+	// Remove duplicates and special IDs (handled separately)
+	var uniqueIds = [];
+	var seen = {};
+	for (var i = 0; i < allIds.length; i++) {
+		var id = allIds[i];
+		if (!seen[id] && special.indexOf(id) === -1) {
+			seen[id] = true;
+			uniqueIds.push(id);
+		}
+	}
+
+	// Fetch all children in parallel
+	var childrenPromises = uniqueIds.map(function(id) {
+		return getBookmarkChildren(id).then(function(children) {
+			prefetchedData.children[id] = children;
+			// Also cache each child node
+			for (var j = 0; j < children.length; j++) {
+				prefetchedData.nodes[children[j].id] = children[j];
+			}
+			return children;
+		});
+	});
+
+	// Also fetch the root nodes themselves (for titles)
+	var nodePromises = uniqueIds.length > 0 ?
+		getBookmarkNodes(uniqueIds).then(function(nodes) {
+			for (var j = 0; j < nodes.length; j++) {
+				prefetchedData.nodes[nodes[j].id] = nodes[j];
+			}
+			return nodes;
+		}) : Promise.resolve([]);
+
+	return Promise.all([nodePromises].concat(childrenPromises));
+}
+
+// Get cached children or fetch if not available
+function getCachedChildren(id, callback) {
+	if (prefetchedData.children.hasOwnProperty(id)) {
+		callback(prefetchedData.children[id]);
+	} else {
+		getBookmarkChildren(id).then(function(children) {
+			prefetchedData.children[id] = children;
+			callback(children);
+		});
+	}
+}
+
+// Get cached node or fetch if not available
+function getCachedNode(id, callback) {
+	if (prefetchedData.nodes.hasOwnProperty(id)) {
+		callback([prefetchedData.nodes[id]]);
+	} else {
+		getBookmarkNodes([id]).then(function(nodes) {
+			if (nodes && nodes[0]) {
+				prefetchedData.nodes[id] = nodes[0];
+			}
+			callback(nodes);
+		});
+	}
+}
+
+// =============================================================================
+// END OPTIMIZED BOOKMARK LOADING
+// =============================================================================
+
 // render a single bookmark node
 function render(node, target) {
     if (node.description === 'separator') return;
@@ -611,14 +753,20 @@ function getChildrenFunction(node) {
         default:
             if (node.children)
                 return function (callback) {
-                    callback(node.children);
+                    // If children is just a boolean marker, fetch actual children
+                    if (node.children === true) {
+                        getCachedChildren(node.id, callback);
+                    } else {
+                        callback(node.children);
+                    }
                 };
             else
                 return function (callback) {
-                    chrome.bookmarks.getSubTree(node.id, function (result) {
-                        if (result)
-                            callback(result[0].children);
-                        else {
+                    // Use cached children instead of getSubTree
+                    getCachedChildren(node.id, function(children) {
+                        if (children) {
+                            callback(children);
+                        } else {
                             // remove missing bookmark locations
                             if (coords[node.id])
                                 removeRow(coords[node.id].x, coords[node.id].y);
@@ -647,10 +795,20 @@ function getSubTree(id, callback) {
             callback([{title: 'Other devices', id: 'devices', children: true}]);
             break;
         default:
-            chrome.bookmarks.getSubTree(id, function (result) {
-                if (result)
-                    callback(result);
-                else {
+            // Use cached node data instead of fetching entire subtree
+            getCachedNode(id, function(nodes) {
+                if (nodes && nodes[0]) {
+                    // Mark as folder if it has children (will be fetched on demand)
+                    var node = nodes[0];
+                    // Check if this folder has children by looking at cache or checking if it's a folder
+                    if (prefetchedData.children.hasOwnProperty(id)) {
+                        node.children = prefetchedData.children[id];
+                    } else {
+                        // Mark as having children (actual children fetched on demand)
+                        node.children = true;
+                    }
+                    callback([node]);
+                } else {
                     // remove missing bookmark locations
                     if (coords[id])
                         removeRow(coords[id].x, coords[id].y);
@@ -704,8 +862,14 @@ function getIcon(node) {
 
     const icon = document.createElement(url ? 'img' : 'div');
     icon.className = 'icon';
-    icon.src = url;
-    if (url2x) icon.srcset = url2x + ' 2x';
+    if (url) {
+        // Use lazy loading for favicons to improve initial page load
+        icon.loading = 'lazy';
+        // Use decoding async to not block rendering
+        icon.decoding = 'async';
+        icon.src = url;
+        if (url2x) icon.srcset = url2x + ' 2x';
+    }
     icon.alt = ' ';
     return icon;
 }
@@ -877,11 +1041,19 @@ function loadColumns() {
 
     if (root) {
         verifyColumns();
-        renderColumns();
+        // Prefetch visible bookmarks in parallel, then render
+        prefetchVisibleBookmarks().then(function() {
+            renderColumns();
+        });
     } else {
-        chrome.bookmarks.getTree(function (result) {
+        // Get bookmark tree and prefetch in parallel
+        Promise.all([
+            getBookmarkTree(),
+            prefetchVisibleBookmarks()
+        ]).then(function(results) {
+            var treeResult = results[0];
             // init root nodes
-            const nodes = result[0].children;
+            const nodes = treeResult[0].children;
             root = special.slice(0);
 
             for (let i = 0; i < nodes.length; i++)
