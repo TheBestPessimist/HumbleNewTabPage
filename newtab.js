@@ -843,6 +843,8 @@ function setClass(target, node, isopen) {
 function getIcon(node) {
     let url = null,
         url2x = null;
+    let useCache = false;
+
     if (node.icons) {
         let size;
         for (let i in node.icons) {
@@ -856,8 +858,13 @@ function getIcon(node) {
     } else if (node.icon) {
         url = node.icon;
     } else if (node.url) {
-        url = `/_favicon/?pageUrl=${encodeURIComponent(node.url)}&size=16`;
-        url2x = `/_favicon/?pageUrl=${encodeURIComponent(node.url)}&size=32`;
+        // Use favicon cache for bookmark URLs
+        useCache = true;
+    }
+
+    // If using cache, return an img that loads from IndexedDB cache
+    if (useCache && typeof FaviconCache !== 'undefined') {
+        return FaviconCache.createIcon(node.url, 16);
     }
 
     const icon = document.createElement(url ? 'img' : 'div');
