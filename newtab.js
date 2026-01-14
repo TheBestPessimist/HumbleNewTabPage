@@ -62,6 +62,16 @@ var prefetchedData = {
 	children: {}    // id -> array of child nodes
 };
 
+// Mark folders (nodes without url) as having children
+function markFolders(children) {
+	for (var i = 0; i < children.length; i++) {
+		if (!children[i].url) {
+			children[i].children = true;
+		}
+	}
+	return children;
+}
+
 // Iterate over column storage entries, calling fn(x, y, id) for each
 // If fn returns false, stop iteration. Returns array of [x, y] pairs visited.
 function forEachColumnEntry(fn) {
@@ -80,14 +90,9 @@ function forEachColumnEntry(fn) {
 	}
 }
 
-// Get all column root IDs from localStorage
-function getColumnIds() {
-	var columnIds = [];
-	forEachColumnEntry(function(x, y, id) { columnIds.push(id); });
-	return columnIds;
-}
-
-// Special folder IDs that need different fetch logic
+// Special folder IDs (apps, top, recent, closed, devices)
+// - 'apps' is a link, not a folder, so it's excluded from folder-related arrays
+var special = ['apps', 'top', 'recent', 'closed', 'devices'];
 var specialFolderIds = ['top', 'recent', 'closed', 'devices'];
 
 // Get cached children or fetch if not available (works for both regular and special folders)
@@ -107,12 +112,7 @@ function getCachedChildren(id, callback) {
 		fetchSpecialFolderData(id).then(callback);
 	} else {
 		getBookmarkChildren(id).then(function(children) {
-			// Mark folders (nodes without url) as having children
-			for (var i = 0; i < children.length; i++) {
-				if (!children[i].url) {
-					children[i].children = true;
-				}
-			}
+			markFolders(children);
 			prefetchedData.children[id] = children;
 			callback(children);
 		});
@@ -136,12 +136,7 @@ function getCachedNode(id, callback) {
 // Prefetch children of a folder and recursively prefetch open subfolders
 function prefetchFolderChildren(id) {
 	return getBookmarkChildren(id).then(function(children) {
-		// Mark folders (nodes without url) as having children
-		for (var j = 0; j < children.length; j++) {
-			if (!children[j].url) {
-				children[j].children = true;
-			}
-		}
+		markFolders(children);
 		prefetchedData.children[id] = children;
 
 		// Check if "remember open folders" is enabled
@@ -191,20 +186,19 @@ function prefetchVisibleBookmarks() {
 		}
 	}
 
-	// Separate special IDs from regular bookmark IDs
-	var specialIds = ['apps', 'top', 'recent', 'closed', 'devices'];
+	// Separate special IDs from regular bookmark IDs (use global 'special' array)
 	var bookmarkIds = columnIds.filter(function(id) {
-		return specialIds.indexOf(id) === -1;
+		return special.indexOf(id) === -1;
 	});
-	var specialFolderIds = columnIds.filter(function(id) {
-		return specialIds.indexOf(id) !== -1 && id !== 'apps'; // apps is not a folder
+	var visibleSpecialFolders = columnIds.filter(function(id) {
+		return specialFolderIds.indexOf(id) !== -1; // excludes 'apps' which is not a folder
 	});
 
 	var promises = [];
 
 	// Prefetch special folders that are open
-	for (var i = 0; i < specialFolderIds.length; i++) {
-		promises.push(prefetchSpecialFolder(specialFolderIds[i]));
+	for (var i = 0; i < visibleSpecialFolders.length; i++) {
+		promises.push(prefetchSpecialFolder(visibleSpecialFolders[i]));
 	}
 
 	// Prefetch regular bookmark folders
@@ -1007,7 +1001,7 @@ function openLink(node, newtab) {
 var columns; // columns[x][y] = id
 var root; // root[] = id
 var coords; // coords[id] = {x:x, y:y}
-const special = ['apps', 'top', 'recent', 'closed', 'devices'];
+// Note: 'special' array is defined at the top of the file
 
 // ensure root folders are included
 function verifyColumns() {
