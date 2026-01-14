@@ -65,6 +65,42 @@ function clearPrefetchCache() {
     prefetchedData.children = {};
 }
 
+// Helper to get config value during prefetch (before full config is loaded)
+function getConfigValue(key, defaultValue) {
+    var value = localStorage.getItem('options.' + key);
+    return value !== null ? Number(value) : defaultValue;
+}
+
+// Prefetch special folder data if it's marked as open
+// Returns a promise that resolves when prefetch is complete
+function prefetchSpecialFolder(id, getTopSites, getRecentBookmarks, getClosedTabs, getDevices) {
+    // Check if this special folder is marked as open
+    if (!localStorage.getItem('open.' + id)) {
+        return Promise.resolve();
+    }
+
+    switch (id) {
+        case 'top':
+            return getTopSites().then(function(result) {
+                prefetchedData.children[id] = result.slice(0, getConfigValue('number_top', 10));
+            });
+        case 'recent':
+            return getRecentBookmarks(getConfigValue('number_recent', 10)).then(function(result) {
+                prefetchedData.children[id] = result;
+            });
+        case 'closed':
+            return getClosedTabs(getConfigValue('number_closed', 10)).then(function(result) {
+                prefetchedData.children[id] = result;
+            });
+        case 'devices':
+            return getDevices(getConfigValue('number_closed', 10)).then(function(result) {
+                prefetchedData.children[id] = result;
+            });
+        default:
+            return Promise.resolve();
+    }
+}
+
 // Export for testing
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
@@ -72,6 +108,8 @@ if (typeof module !== 'undefined' && module.exports) {
         getCachedChildren: getCachedChildren,
         clearPrefetchCache: clearPrefetchCache,
         getPrefetchedData: function() { return prefetchedData; },
+        prefetchSpecialFolder: prefetchSpecialFolder,
+        getConfigValue: getConfigValue,
         special: special
     };
 }

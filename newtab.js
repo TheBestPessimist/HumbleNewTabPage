@@ -33,6 +33,74 @@ function getBookmarkTree() {
 	});
 }
 
+// Promise wrappers for special folder data
+function getTopSitesPromise() {
+	return new Promise(function(resolve) {
+		if (chrome.topSites) {
+			chrome.topSites.get(function(result) {
+				resolve(result || []);
+			});
+		} else {
+			resolve([]);
+		}
+	});
+}
+
+function getRecentBookmarksPromise(count) {
+	return new Promise(function(resolve) {
+		chrome.bookmarks.getRecent(count, function(result) {
+			resolve(result || []);
+		});
+	});
+}
+
+function getClosedTabsPromise(maxResults) {
+	return new Promise(function(resolve) {
+		chrome.sessions.getRecentlyClosed({maxResults: maxResults}, function(sessions) {
+			var nodes = [];
+			for (var i = 0; i < (sessions || []).length && i < maxResults; i++) {
+				var session = sessions[i];
+				if (session.window && session.window.tabs.length === 1)
+					session.tab = session.window.tabs[0];
+				nodes.push({
+					title: session.tab ? session.tab.title : session.window.tabs.length + ' Tabs',
+					url: session.tab ? session.tab.url : null,
+					className: session.window ? 'window' : null
+				});
+			}
+			resolve(nodes);
+		});
+	});
+}
+
+function getDevicesPromise(maxResults) {
+	return new Promise(function(resolve) {
+		chrome.sessions.getDevices({maxResults: maxResults}, function(devices) {
+			var nodes = [];
+			for (var i = 0; i < (devices || []).length; i++) {
+				var device = devices[i];
+				var children = [];
+				for (var j = 0; j < device.sessions.length; j++) {
+					var session = device.sessions[j];
+					if (session.window && session.window.tabs.length === 1)
+						session.tab = session.window.tabs[0];
+					children.push({
+						title: session.tab ? session.tab.title : session.window.tabs.length + ' Tabs',
+						url: session.tab ? session.tab.url : null,
+						className: session.window ? 'window' : null
+					});
+				}
+				nodes.push({
+					title: device.deviceName,
+					id: 'device.' + device.deviceName,
+					children: children
+				});
+			}
+			resolve(nodes);
+		});
+	});
+}
+
 // Cache for prefetched bookmark data
 var prefetchedData = {
 	nodes: {},      // id -> node data
@@ -88,6 +156,71 @@ function getCachedNode(id, callback) {
 	}
 }
 
+// Prefetch children of a folder and recursively prefetch open subfolders
+function prefetchFolderChildren(id) {
+	return getBookmarkChildren(id).then(function(children) {
+		// Mark folders (nodes without url) as having children
+		for (var j = 0; j < children.length; j++) {
+			if (!children[j].url) {
+				children[j].children = true;
+			}
+		}
+		prefetchedData.children[id] = children;
+
+		// Check if "remember open folders" is enabled
+		var rememberOpen = localStorage.getItem('options.remember_open');
+		if (rememberOpen === null || rememberOpen === '1' || rememberOpen === 'true') {
+			// Recursively prefetch children of open subfolders
+			var openFolderPromises = [];
+			for (var k = 0; k < children.length; k++) {
+				var child = children[k];
+				// If it's a folder and marked as open in localStorage
+				if (!child.url && localStorage.getItem('open.' + child.id)) {
+					openFolderPromises.push(prefetchFolderChildren(child.id));
+				}
+			}
+			if (openFolderPromises.length > 0) {
+				return Promise.all(openFolderPromises);
+			}
+		}
+	});
+}
+
+// Prefetch special folder data if it's marked as open
+function prefetchSpecialFolder(id) {
+	// Check if this special folder is marked as open
+	if (!localStorage.getItem('open.' + id)) {
+		return Promise.resolve();
+	}
+
+	switch (id) {
+		case 'top':
+			return getTopSitesPromise().then(function(result) {
+				prefetchedData.children[id] = result.slice(0, getConfigValue('number_top', 10));
+			});
+		case 'recent':
+			return getRecentBookmarksPromise(getConfigValue('number_recent', 10)).then(function(result) {
+				prefetchedData.children[id] = result;
+			});
+		case 'closed':
+			return getClosedTabsPromise(getConfigValue('number_closed', 10)).then(function(result) {
+				prefetchedData.children[id] = result;
+			});
+		case 'devices':
+			return getDevicesPromise(getConfigValue('number_closed', 10)).then(function(result) {
+				prefetchedData.children[id] = result;
+			});
+		default:
+			return Promise.resolve();
+	}
+}
+
+// Helper to get config value during prefetch (before full config is loaded)
+function getConfigValue(key, defaultValue) {
+	var value = localStorage.getItem('options.' + key);
+	return value !== null ? Number(value) : defaultValue;
+}
+
 // Prefetch visible bookmarks for all columns
 function prefetchVisibleBookmarks() {
 	// Get all column IDs from the columns variable
@@ -100,40 +233,43 @@ function prefetchVisibleBookmarks() {
 		}
 	}
 
-	// Filter out special IDs that aren't real bookmark IDs
+	// Separate special IDs from regular bookmark IDs
 	var specialIds = ['apps', 'top', 'recent', 'closed', 'devices'];
 	var bookmarkIds = columnIds.filter(function(id) {
 		return specialIds.indexOf(id) === -1;
 	});
+	var specialFolderIds = columnIds.filter(function(id) {
+		return specialIds.indexOf(id) !== -1 && id !== 'apps'; // apps is not a folder
+	});
 
-	if (bookmarkIds.length === 0) {
-		return Promise.resolve();
+	var promises = [];
+
+	// Prefetch special folders that are open
+	for (var i = 0; i < specialFolderIds.length; i++) {
+		promises.push(prefetchSpecialFolder(specialFolderIds[i]));
 	}
 
-	// Prefetch all column root nodes
-	return getBookmarkNodes(bookmarkIds).then(function(nodes) {
-		// Cache the nodes
-		for (var i = 0; i < nodes.length; i++) {
-			if (nodes[i]) {
-				prefetchedData.nodes[nodes[i].id] = nodes[i];
-			}
-		}
-
-		// Prefetch children for each folder
-		var childPromises = bookmarkIds.map(function(id) {
-			return getBookmarkChildren(id).then(function(children) {
-				// Mark folders (nodes without url) as having children
-				for (var j = 0; j < children.length; j++) {
-					if (!children[j].url) {
-						children[j].children = true;
-					}
+	// Prefetch regular bookmark folders
+	if (bookmarkIds.length > 0) {
+		var bookmarkPromise = getBookmarkNodes(bookmarkIds).then(function(nodes) {
+			// Cache the nodes
+			for (var i = 0; i < nodes.length; i++) {
+				if (nodes[i]) {
+					prefetchedData.nodes[nodes[i].id] = nodes[i];
 				}
-				prefetchedData.children[id] = children;
-			});
-		});
+			}
 
-		return Promise.all(childPromises);
-	});
+			// Prefetch children for each folder (including open subfolders recursively)
+			var childPromises = bookmarkIds.map(function(id) {
+				return prefetchFolderChildren(id);
+			});
+
+			return Promise.all(childPromises);
+		});
+		promises.push(bookmarkPromise);
+	}
+
+	return Promise.all(promises);
 }
 
 // =============================================================================
@@ -723,30 +859,53 @@ function getChildrenFunction(node) {
     switch (node.id) {
         case 'top':
             return function (callback) {
-                if (chrome.topSites)
+                // Use cached data if available
+                if (prefetchedData.children.hasOwnProperty('top')) {
+                    callback(prefetchedData.children['top']);
+                    delete prefetchedData.children['top']; // Clear cached data
+                } else if (chrome.topSites) {
                     chrome.topSites.get(function (result) {
                         callback(result.slice(0, getConfig('number_top')));
                     });
-                else
+                } else {
                     callback([]);
+                }
             };
         case 'recent':
             return function (callback) {
-                chrome.bookmarks.getRecent(getConfig('number_recent'), function (result) {
-                    callback(result);
-                });
+                // Use cached data if available
+                if (prefetchedData.children.hasOwnProperty('recent')) {
+                    callback(prefetchedData.children['recent']);
+                    delete prefetchedData.children['recent']; // Clear cached data
+                } else {
+                    chrome.bookmarks.getRecent(getConfig('number_recent'), function (result) {
+                        callback(result);
+                    });
+                }
             };
         case 'closed':
             return function (callback) {
-                getClosed(function (result) {
-                    callback(result);
-                });
+                // Use cached data if available
+                if (prefetchedData.children.hasOwnProperty('closed')) {
+                    callback(prefetchedData.children['closed']);
+                    delete prefetchedData.children['closed']; // Clear cached data
+                } else {
+                    getClosed(function (result) {
+                        callback(result);
+                    });
+                }
             };
         case 'devices':
             return function (callback) {
-                getDevices(function (result) {
-                    callback(result);
-                });
+                // Use cached data if available
+                if (prefetchedData.children.hasOwnProperty('devices')) {
+                    callback(prefetchedData.children['devices']);
+                    delete prefetchedData.children['devices']; // Clear cached data
+                } else {
+                    getDevices(function (result) {
+                        callback(result);
+                    });
+                }
             };
         default:
             if (node.children)

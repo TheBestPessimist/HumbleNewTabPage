@@ -236,6 +236,76 @@ async function testNoUndefinedFunctionCalls() {
         `Found potentially undefined function calls: ${undefinedCalls.join(', ')}`);
 }
 
+async function testPrefetchSpecialFolderWhenOpen() {
+    const { prefetchSpecialFolder, clearPrefetchCache, getPrefetchedData } = require('../newtab-functions.js');
+    clearPrefetchCache();
+
+    // Mark 'recent' folder as open
+    global.localStorage.setItem('open.recent', 'true');
+
+    // Mock getRecentBookmarks function
+    const mockRecentBookmarks = [
+        { id: 'r1', title: 'Recent 1', url: 'https://recent1.com' },
+        { id: 'r2', title: 'Recent 2', url: 'https://recent2.com' }
+    ];
+    const getRecentBookmarks = function(count) {
+        return Promise.resolve(mockRecentBookmarks);
+    };
+
+    // Prefetch the special folder
+    await prefetchSpecialFolder('recent', null, getRecentBookmarks, null, null);
+
+    const cache = getPrefetchedData();
+    assert(cache.children['recent'] !== undefined, 'Should cache recent bookmarks');
+    assert(cache.children['recent'].length === 2, 'Should have 2 recent bookmarks');
+}
+
+async function testPrefetchSpecialFolderSkipsWhenClosed() {
+    const { prefetchSpecialFolder, clearPrefetchCache, getPrefetchedData } = require('../newtab-functions.js');
+    clearPrefetchCache();
+
+    // Do NOT mark 'recent' folder as open (it's closed)
+    // localStorage.setItem('open.recent', 'true'); // intentionally not set
+
+    let apiCalled = false;
+    const getRecentBookmarks = function(count) {
+        apiCalled = true;
+        return Promise.resolve([]);
+    };
+
+    // Prefetch the special folder
+    await prefetchSpecialFolder('recent', null, getRecentBookmarks, null, null);
+
+    const cache = getPrefetchedData();
+    assert(cache.children['recent'] === undefined, 'Should NOT cache recent bookmarks when folder is closed');
+    assert(!apiCalled, 'Should NOT call API when folder is closed');
+}
+
+async function testPrefetchTopSitesWhenOpen() {
+    const { prefetchSpecialFolder, clearPrefetchCache, getPrefetchedData } = require('../newtab-functions.js');
+    clearPrefetchCache();
+
+    // Mark 'top' folder as open
+    global.localStorage.setItem('open.top', 'true');
+
+    // Mock getTopSites function
+    const mockTopSites = [
+        { title: 'Site 1', url: 'https://site1.com' },
+        { title: 'Site 2', url: 'https://site2.com' },
+        { title: 'Site 3', url: 'https://site3.com' }
+    ];
+    const getTopSites = function() {
+        return Promise.resolve(mockTopSites);
+    };
+
+    // Prefetch the special folder
+    await prefetchSpecialFolder('top', getTopSites, null, null, null);
+
+    const cache = getPrefetchedData();
+    assert(cache.children['top'] !== undefined, 'Should cache top sites');
+    assert(cache.children['top'].length === 3, 'Should have 3 top sites');
+}
+
 // Run all tests
 async function runAllTests() {
     console.log('Running bookmark loading optimization tests...\n');
@@ -245,6 +315,9 @@ async function runAllTests() {
     await runTest('getCachedChildren marks folders as expandable', testGetCachedChildrenMarksFolders);
     await runTest('getCachedChildren caches results', testGetCachedChildrenCachesResults);
     await runTest('no undefined function calls in newtab.js', testNoUndefinedFunctionCalls);
+    await runTest('prefetchSpecialFolder caches data when folder is open', testPrefetchSpecialFolderWhenOpen);
+    await runTest('prefetchSpecialFolder skips when folder is closed', testPrefetchSpecialFolderSkipsWhenClosed);
+    await runTest('prefetchSpecialFolder handles top sites', testPrefetchTopSitesWhenOpen);
 
     console.log(`\nResults: ${testsPassed} passed, ${testsFailed} failed`);
     process.exit(testsFailed > 0 ? 1 : 0);
