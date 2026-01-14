@@ -1,6 +1,9 @@
 // Apply critical styles immediately to prevent white flash
 // This runs before body renders, reading from localStorage
 (function() {
+    // Performance: Record when this script runs (relative to navigation start)
+    window.__earlyStylesTime = performance.now();
+    console.log('[PERF:EARLY] early-styles.js running at: ' + window.__earlyStylesTime.toFixed(2) + 'ms after navigation');
     const themes = {
         Classic: { background_color: '#ffffff', font_color: '#000000' },
         Dusk: { background_color: '#56546b', font_color: '#c8b9be' },
@@ -25,4 +28,3 @@
     style.textContent = 'body{background-color:' + bgColor + ' !important}#main a{color:' + fontColor + '}';
     document.head.appendChild(style);
 })();
-

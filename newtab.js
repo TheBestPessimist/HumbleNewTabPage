@@ -71,6 +71,9 @@ const Perf = {
         // Navigation timing (when did the page actually start loading?)
         const navTiming = performance.getEntriesByType('navigation')[0];
 
+        // Resource timing for scripts
+        const resources = performance.getEntriesByType('resource');
+
         console.log('\n' + '='.repeat(60));
         console.log('PERFORMANCE REPORT - Copy everything below this line');
         console.log('='.repeat(60));
@@ -82,6 +85,27 @@ const Perf = {
         if (navTiming) {
             console.log(`  DOM Content Loaded: ${navTiming.domContentLoadedEventEnd.toFixed(2)}ms`);
             console.log(`  Page Load Complete: ${navTiming.loadEventEnd.toFixed(2)}ms`);
+        }
+
+        // Pre-script delay breakdown
+        console.log('\n⏱️ PRE-SCRIPT DELAY BREAKDOWN:');
+        if (window.__earlyStylesTime) {
+            console.log(`  early-styles.js ran at: ${window.__earlyStylesTime.toFixed(2)}ms`);
+        }
+        console.log(`  newtab.js started at: ${this.startTime.toFixed(2)}ms`);
+        if (navTiming) {
+            console.log(`  HTML parsing: responseEnd=${navTiming.responseEnd.toFixed(2)}ms`);
+            console.log(`  DOM interactive: ${navTiming.domInteractive.toFixed(2)}ms`);
+        }
+
+        // Script loading times
+        const scriptResources = resources.filter(r => r.name.includes('.js'));
+        if (scriptResources.length > 0) {
+            console.log('\n📜 SCRIPT LOADING:');
+            scriptResources.forEach(r => {
+                const name = r.name.split('/').pop();
+                console.log(`  ${name}: start=${r.startTime.toFixed(1)}ms, duration=${r.duration.toFixed(1)}ms`);
+            });
         }
 
         // Timeline
@@ -115,6 +139,16 @@ const Perf = {
 
         // Diagnosis
         console.log('\n🔍 DIAGNOSIS:');
+
+        // Check pre-script delay
+        if (this.startTime > 100) {
+            console.log(`  ❌ CRITICAL: ${this.startTime.toFixed(0)}ms before script even starts!`);
+            console.log(`     This is likely due to:`);
+            console.log(`     - Script files being loaded synchronously at end of <body>`);
+            console.log(`     - favicon-cache.js and newtab.js blocking each other`);
+            console.log(`     FIX: Move scripts to <head> with 'defer' attribute`);
+        }
+
         if (this.apiCalls.totalTime > 100) {
             console.log(`  ⚠️  Chrome APIs taking ${this.apiCalls.totalTime.toFixed(0)}ms - this is likely the bottleneck`);
         }
@@ -127,6 +161,14 @@ const Perf = {
             console.log(`  ✅ First paint is fast (${this.firstPaintTime.toFixed(0)}ms)`);
         } else if (this.firstPaintTime) {
             console.log(`  ❌ First paint is slow (${this.firstPaintTime.toFixed(0)}ms) - target is <25ms`);
+        }
+
+        // Total time from navigation to first paint
+        const totalFromNav = this.startTime + (this.firstPaintTime || totalTime);
+        console.log(`\n📈 TOTAL TIME FROM NAVIGATION TO FIRST PAINT: ${totalFromNav.toFixed(0)}ms`);
+        if (totalFromNav > 25) {
+            console.log(`   Target: <25ms, Current: ${totalFromNav.toFixed(0)}ms`);
+            console.log(`   Need to reduce by: ${(totalFromNav - 25).toFixed(0)}ms`);
         }
 
         console.log('\n' + '='.repeat(60));
