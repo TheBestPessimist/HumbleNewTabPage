@@ -1534,7 +1534,7 @@ function initSettings() {
                 var option = document.createElement('option');
                 option.innerText = i;
                 if (i === getConfig('theme'))
-                    option.selected = 'selected';
+                    option.selected = true;
                 select.appendChild(option);
             }
         }
@@ -1552,7 +1552,7 @@ function initSettings() {
                     const option = document.createElement('option');
                     option.innerText = font;
                     if (font === getConfig('font'))
-                        option.selected = 'selected';
+                        option.selected = true;
                     select.appendChild(option);
                 }
             });
