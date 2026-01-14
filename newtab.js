@@ -39,18 +39,6 @@ var prefetchedData = {
 	children: {}    // id -> array of child nodes
 };
 
-// Get all open folder IDs from localStorage
-function getOpenFolderIds() {
-	var openIds = [];
-	for (var i = 0; i < localStorage.length; i++) {
-		var key = localStorage.key(i);
-		if (key && key.indexOf('open.') === 0) {
-			openIds.push(key.substring(5));
-		}
-	}
-	return openIds;
-}
-
 // Get all column root IDs from localStorage
 function getColumnIds() {
 	var columnIds = [];
@@ -68,56 +56,18 @@ function getColumnIds() {
 	return columnIds;
 }
 
-// Prefetch all visible bookmark data in parallel
-function prefetchVisibleBookmarks() {
-	var columnIds = getColumnIds();
-	var openIds = getOpenFolderIds();
-
-	// Combine all IDs that need children fetched
-	// Column roots need children, open folders need children
-	var allIds = columnIds.concat(openIds);
-
-	// Remove duplicates and special IDs (handled separately)
-	var uniqueIds = [];
-	var seen = {};
-	for (var i = 0; i < allIds.length; i++) {
-		var id = allIds[i];
-		if (!seen[id] && special.indexOf(id) === -1) {
-			seen[id] = true;
-			uniqueIds.push(id);
-		}
-	}
-
-	// Fetch all children in parallel
-	var childrenPromises = uniqueIds.map(function(id) {
-		return getBookmarkChildren(id).then(function(children) {
-			prefetchedData.children[id] = children;
-			// Also cache each child node
-			for (var j = 0; j < children.length; j++) {
-				prefetchedData.nodes[children[j].id] = children[j];
-			}
-			return children;
-		});
-	});
-
-	// Also fetch the root nodes themselves (for titles)
-	var nodePromises = uniqueIds.length > 0 ?
-		getBookmarkNodes(uniqueIds).then(function(nodes) {
-			for (var j = 0; j < nodes.length; j++) {
-				prefetchedData.nodes[nodes[j].id] = nodes[j];
-			}
-			return nodes;
-		}) : Promise.resolve([]);
-
-	return Promise.all([nodePromises].concat(childrenPromises));
-}
-
 // Get cached children or fetch if not available
 function getCachedChildren(id, callback) {
 	if (prefetchedData.children.hasOwnProperty(id)) {
 		callback(prefetchedData.children[id]);
 	} else {
 		getBookmarkChildren(id).then(function(children) {
+			// Mark folders (nodes without url) as having children
+			for (var i = 0; i < children.length; i++) {
+				if (!children[i].url) {
+					children[i].children = true;
+				}
+			}
 			prefetchedData.children[id] = children;
 			callback(children);
 		});
@@ -136,6 +86,54 @@ function getCachedNode(id, callback) {
 			callback(nodes);
 		});
 	}
+}
+
+// Prefetch visible bookmarks for all columns
+function prefetchVisibleBookmarks() {
+	// Get all column IDs from the columns variable
+	var columnIds = [];
+	if (columns) {
+		for (var x = 0; x < columns.length; x++) {
+			for (var y = 0; y < columns[x].length; y++) {
+				columnIds.push(columns[x][y]);
+			}
+		}
+	}
+
+	// Filter out special IDs that aren't real bookmark IDs
+	var specialIds = ['apps', 'top', 'recent', 'closed', 'devices'];
+	var bookmarkIds = columnIds.filter(function(id) {
+		return specialIds.indexOf(id) === -1;
+	});
+
+	if (bookmarkIds.length === 0) {
+		return Promise.resolve();
+	}
+
+	// Prefetch all column root nodes
+	return getBookmarkNodes(bookmarkIds).then(function(nodes) {
+		// Cache the nodes
+		for (var i = 0; i < nodes.length; i++) {
+			if (nodes[i]) {
+				prefetchedData.nodes[nodes[i].id] = nodes[i];
+			}
+		}
+
+		// Prefetch children for each folder
+		var childPromises = bookmarkIds.map(function(id) {
+			return getBookmarkChildren(id).then(function(children) {
+				// Mark folders (nodes without url) as having children
+				for (var j = 0; j < children.length; j++) {
+					if (!children[j].url) {
+						children[j].children = true;
+					}
+				}
+				prefetchedData.children[id] = children;
+			});
+		});
+
+		return Promise.all(childPromises);
+	});
 }
 
 // =============================================================================

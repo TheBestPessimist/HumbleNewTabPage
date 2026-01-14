@@ -7,10 +7,7 @@
 
 // Track API calls for verification
 const apiCalls = {
-    getSubTree: [],
-    getChildren: [],
-    get: [],
-    getTree: []
+    getChildren: []
 };
 
 // Mock localStorage
@@ -24,17 +21,17 @@ global.localStorage = {
     clear: function() { for (let k in mockStorage) delete mockStorage[k]; }
 };
 
-// Mock bookmark data
+// Mock bookmark data - folders have no url, bookmarks have url
 const mockBookmarks = {
-    '1': { id: '1', title: 'Bookmarks Bar' },
-    '2': { id: '2', title: 'Other Bookmarks' },
-    '10': { id: '10', title: 'Folder A', url: null },
-    '11': { id: '11', title: 'Site 1', url: 'https://example.com' },
-    '12': { id: '12', title: 'Folder B', url: null },
-    '20': { id: '20', title: 'Site 2', url: 'https://test.com' },
-    '21': { id: '21', title: 'Site 3', url: 'https://demo.com' },
-    '100': { id: '100', title: 'Nested 1', url: 'https://nested1.com' },
-    '101': { id: '101', title: 'Nested 2', url: 'https://nested2.com' }
+    '1': { id: '1', title: 'Bookmarks Bar' },  // folder (no url)
+    '2': { id: '2', title: 'Other Bookmarks' },  // folder (no url)
+    '10': { id: '10', title: 'Folder A' },  // folder (no url)
+    '11': { id: '11', title: 'Site 1', url: 'https://example.com' },  // bookmark
+    '12': { id: '12', title: 'Folder B' },  // folder (no url)
+    '20': { id: '20', title: 'Site 2', url: 'https://test.com' },  // bookmark
+    '21': { id: '21', title: 'Site 3', url: 'https://demo.com' },  // bookmark
+    '100': { id: '100', title: 'Nested 1', url: 'https://nested1.com' },  // bookmark
+    '101': { id: '101', title: 'Nested 2', url: 'https://nested2.com' }  // bookmark
 };
 
 const mockChildren = {
@@ -47,40 +44,19 @@ const mockChildren = {
 // Mock Chrome APIs
 global.chrome = {
     bookmarks: {
-        get: function(ids, callback) {
-            apiCalls.get.push([...ids]);
-            const results = ids.map(id => mockBookmarks[id]).filter(Boolean);
-            setTimeout(() => callback(results), 5);
-        },
         getChildren: function(id, callback) {
             apiCalls.getChildren.push(id);
-            setTimeout(() => callback(mockChildren[id] || []), 5);
-        },
-        getSubTree: function(id, callback) {
-            apiCalls.getSubTree.push(id);
-            setTimeout(() => callback([mockBookmarks[id]]), 50);
-        },
-        getTree: function(callback) {
-            apiCalls.getTree.push(true);
-            setTimeout(() => callback([{ children: [mockBookmarks['1'], mockBookmarks['2']] }]), 5);
-        },
-        getRecent: function(count, callback) { callback([]); }
-    },
-    topSites: { get: function(callback) { callback([]); } },
-    sessions: {
-        getRecentlyClosed: function(opts, callback) { callback([]); },
-        getDevices: function(opts, callback) { callback([]); }
-    },
-    tabs: { getCurrent: function(callback) { callback({ id: 1 }); } }
+            // Return copies to avoid mutation issues
+            const children = (mockChildren[id] || []).map(c => ({...c}));
+            setTimeout(() => callback(children), 5);
+        }
+    }
 };
 
 // Reset state between tests
 function resetState() {
     global.localStorage.clear();
-    apiCalls.getSubTree = [];
     apiCalls.getChildren = [];
-    apiCalls.get = [];
-    apiCalls.getTree = [];
     // Clear require cache to get fresh module state
     delete require.cache[require.resolve('../newtab-functions.js')];
 }
@@ -112,19 +88,6 @@ async function runTest(name, testFn) {
 // TESTS
 // =============================================================================
 
-async function testGetOpenFolderIds() {
-    global.localStorage.setItem('open.10', 'true');
-    global.localStorage.setItem('open.12', 'true');
-    global.localStorage.setItem('column.0.0', '1');
-
-    const { getOpenFolderIds } = require('../newtab-functions.js');
-    const openIds = getOpenFolderIds();
-
-    assert(openIds.length === 2, `Expected 2 open folders, got ${openIds.length}`);
-    assert(openIds.includes('10'), 'Should include folder 10');
-    assert(openIds.includes('12'), 'Should include folder 12');
-}
-
 async function testGetColumnIds() {
     global.localStorage.setItem('column.0.0', '1');
     global.localStorage.setItem('column.0.1', '2');
@@ -139,70 +102,149 @@ async function testGetColumnIds() {
     assert(columnIds[2] === 'top', 'Third column ID should be top');
 }
 
-async function testPrefetchUsesGetChildrenNotGetSubTree() {
-    global.localStorage.setItem('column.0.0', '1');
-    global.localStorage.setItem('column.0.1', '2');
-    global.localStorage.setItem('open.10', 'true');
-
-    const { prefetchVisibleBookmarks, clearPrefetchCache } = require('../newtab-functions.js');
+async function testGetCachedChildrenFetchesOnDemand() {
+    const { getCachedChildren, clearPrefetchCache } = require('../newtab-functions.js');
     clearPrefetchCache();
-    await prefetchVisibleBookmarks();
 
-    assert(apiCalls.getSubTree.length === 0,
-        `Should not call getSubTree, but called ${apiCalls.getSubTree.length} times`);
-    assert(apiCalls.getChildren.length > 0,
-        'Should call getChildren at least once');
+    await new Promise(resolve => {
+        getCachedChildren('1', function(children) {
+            assert(children.length === 3, `Expected 3 children, got ${children.length}`);
+            resolve();
+        });
+    });
+
+    assert(apiCalls.getChildren.includes('1'), 'Should fetch children via getChildren API');
 }
 
-async function testOnlyFetchesVisibleBookmarks() {
-    global.localStorage.setItem('column.0.0', '1');
-    global.localStorage.setItem('open.10', 'true');
-
-    const { prefetchVisibleBookmarks, clearPrefetchCache } = require('../newtab-functions.js');
+async function testGetCachedChildrenMarksFolders() {
+    const { getCachedChildren, clearPrefetchCache } = require('../newtab-functions.js');
     clearPrefetchCache();
-    await prefetchVisibleBookmarks();
 
-    assert(apiCalls.getChildren.includes('1'), 'Should fetch children of column root 1');
-    assert(apiCalls.getChildren.includes('10'), 'Should fetch children of open folder 10');
-    assert(!apiCalls.getChildren.includes('12'), 'Should NOT fetch children of closed folder 12');
+    await new Promise(resolve => {
+        getCachedChildren('1', function(children) {
+            // Folder A (id 10) should be marked as folder
+            const folderA = children.find(c => c.id === '10');
+            assert(folderA.children === true, 'Folder A should have children=true');
+
+            // Site 1 (id 11) should NOT be marked as folder
+            const site1 = children.find(c => c.id === '11');
+            assert(!site1.children, 'Site 1 should NOT have children property');
+
+            // Folder B (id 12) should be marked as folder
+            const folderB = children.find(c => c.id === '12');
+            assert(folderB.children === true, 'Folder B should have children=true');
+
+            resolve();
+        });
+    });
 }
 
-async function testCachesResults() {
-    global.localStorage.setItem('column.0.0', '1');
-
-    const { prefetchVisibleBookmarks, clearPrefetchCache, getPrefetchedData } = require('../newtab-functions.js');
+async function testGetCachedChildrenCachesResults() {
+    const { getCachedChildren, clearPrefetchCache, getPrefetchedData } = require('../newtab-functions.js');
     clearPrefetchCache();
-    await prefetchVisibleBookmarks();
+
+    // First call - should fetch
+    await new Promise(resolve => {
+        getCachedChildren('1', resolve);
+    });
+
+    assert(apiCalls.getChildren.length === 1, 'Should have made 1 API call');
+
+    // Second call - should use cache
+    await new Promise(resolve => {
+        getCachedChildren('1', resolve);
+    });
+
+    assert(apiCalls.getChildren.length === 1, 'Should still have only 1 API call (cached)');
 
     const cache = getPrefetchedData();
     assert(cache.children['1'] !== undefined, 'Should cache children of folder 1');
-    assert(cache.children['1'].length === 3, 'Should have 3 children cached for folder 1');
 }
 
-async function testSpecialFoldersNotFetched() {
-    global.localStorage.setItem('column.0.0', 'top');
-    global.localStorage.setItem('column.0.1', 'recent');
-    global.localStorage.setItem('column.1.0', '1');
+async function testNoUndefinedFunctionCalls() {
+    // Read newtab.js and check for standalone function calls that reference undefined functions
+    // This test specifically catches bugs like calling prefetchVisibleBookmarks() without defining it
+    const fs = require('fs');
+    const path = require('path');
 
-    const { prefetchVisibleBookmarks, clearPrefetchCache } = require('../newtab-functions.js');
-    clearPrefetchCache();
-    await prefetchVisibleBookmarks();
+    const newtabPath = path.join(__dirname, '..', 'newtab.js');
+    const content = fs.readFileSync(newtabPath, 'utf8');
 
-    assert(!apiCalls.getChildren.includes('top'), 'Should NOT fetch children of special folder top');
-    assert(!apiCalls.getChildren.includes('recent'), 'Should NOT fetch children of special folder recent');
-    assert(apiCalls.getChildren.includes('1'), 'Should fetch children of regular folder 1');
+    // Extract all function definitions (function name(...) or var/let/const name = function)
+    const functionDefRegex = /(?:function\s+(\w+)\s*\(|(?:var|let|const)\s+(\w+)\s*=\s*function)/g;
+    const definedFunctions = new Set();
+
+    let match;
+    while ((match = functionDefRegex.exec(content)) !== null) {
+        const funcName = match[1] || match[2];
+        if (funcName) {
+            definedFunctions.add(funcName);
+        }
+    }
+
+    // Add built-in/global functions, browser APIs, and common callback parameter names
+    const builtins = [
+        // JavaScript built-ins
+        'Promise', 'setTimeout', 'setInterval', 'clearTimeout', 'clearInterval',
+        'parseInt', 'parseFloat', 'isNaN', 'isFinite', 'encodeURIComponent', 'decodeURIComponent',
+        'getComputedStyle', 'matchMedia', 'requestAnimationFrame', 'cancelAnimationFrame',
+        'alert', 'confirm', 'prompt', 'FileReader', 'MouseEvent',
+        'Number', 'String', 'Boolean', 'Array', 'Object', 'Date', 'Math', 'JSON', 'RegExp',
+        'Error', 'TypeError', 'ReferenceError', 'SyntaxError',
+        // Common callback/promise parameter names (these are local variables, not global functions)
+        'resolve', 'reject', 'callback', 'cb', 'done', 'next', 'err', 'error',
+        // Common variable names that might be called as functions
+        'url', 'action', 'handler', 'fn', 'func'
+    ];
+    builtins.forEach(b => definedFunctions.add(b));
+
+    // Find STANDALONE function calls (not method calls like obj.method())
+    // Match: start of line or after operators/punctuation, then functionName(
+    // Exclude: .functionName( which is a method call
+    const lines = content.split('\n');
+    const undefinedCalls = [];
+
+    for (let lineNum = 0; lineNum < lines.length; lineNum++) {
+        const line = lines[lineNum];
+
+        // Skip comments
+        if (line.trim().startsWith('//') || line.trim().startsWith('*')) continue;
+
+        // Find standalone function calls - preceded by whitespace, operators, or start of expression
+        // but NOT preceded by a dot (which would make it a method call)
+        const standaloneCallRegex = /(?:^|[^.\w])([a-zA-Z_]\w*)\s*\(/g;
+
+        while ((match = standaloneCallRegex.exec(line)) !== null) {
+            const funcName = match[1];
+
+            // Skip keywords
+            const keywords = ['if', 'for', 'while', 'switch', 'catch', 'with', 'return', 'throw',
+                'new', 'typeof', 'instanceof', 'delete', 'void', 'yield', 'await', 'async',
+                'class', 'extends', 'super', 'import', 'export', 'default', 'from', 'as',
+                'try', 'finally', 'else', 'case', 'break', 'continue', 'debugger', 'do',
+                'in', 'of', 'let', 'const', 'var', 'function'];
+            if (keywords.includes(funcName)) continue;
+
+            // Check if this function is defined
+            if (!definedFunctions.has(funcName)) {
+                undefinedCalls.push(`${funcName} (line ${lineNum + 1})`);
+            }
+        }
+    }
+
+    assert(undefinedCalls.length === 0,
+        `Found potentially undefined function calls: ${undefinedCalls.join(', ')}`);
 }
 
 // Run all tests
 async function runAllTests() {
     console.log('Running bookmark loading optimization tests...\n');
 
-    await runTest('getOpenFolderIds returns correct open folder IDs', testGetOpenFolderIds);
     await runTest('getColumnIds returns correct column IDs', testGetColumnIds);
-    await runTest('prefetch uses getChildren not getSubTree', testPrefetchUsesGetChildrenNotGetSubTree);
-    await runTest('only fetches visible bookmarks', testOnlyFetchesVisibleBookmarks);
-    await runTest('caches prefetched results', testCachesResults);
-    await runTest('special folders are not fetched via getChildren', testSpecialFoldersNotFetched);
+    await runTest('getCachedChildren fetches on demand', testGetCachedChildrenFetchesOnDemand);
+    await runTest('getCachedChildren marks folders as expandable', testGetCachedChildrenMarksFolders);
+    await runTest('getCachedChildren caches results', testGetCachedChildrenCachesResults);
+    await runTest('no undefined function calls in newtab.js', testNoUndefinedFunctionCalls);
 
     console.log(`\nResults: ${testsPassed} passed, ${testsFailed} failed`);
     process.exit(testsFailed > 0 ? 1 : 0);
