@@ -4,32 +4,25 @@
 // OPTIMIZED BOOKMARK LOADING - Prefetch only visible bookmarks in parallel
 // =============================================================================
 
-// Promise wrappers for Chrome bookmark APIs
-function getBookmarkNodes(ids) {
+// Promise wrapper helper for Chrome APIs
+function promisify(fn, arg) {
 	return new Promise(function(resolve) {
-		if (!ids || ids.length === 0) {
-			resolve([]);
-			return;
-		}
-		chrome.bookmarks.get(ids, function(results) {
-			resolve(results || []);
-		});
+		fn(arg, function(results) { resolve(results || []); });
 	});
 }
 
+// Promise wrappers for Chrome bookmark APIs
+function getBookmarkNodes(ids) {
+	return (!ids || ids.length === 0) ? Promise.resolve([]) : promisify(chrome.bookmarks.get, ids);
+}
+
 function getBookmarkChildren(id) {
-	return new Promise(function(resolve) {
-		chrome.bookmarks.getChildren(id, function(results) {
-			resolve(results || []);
-		});
-	});
+	return promisify(chrome.bookmarks.getChildren, id);
 }
 
 function getBookmarkTree() {
 	return new Promise(function(resolve) {
-		chrome.bookmarks.getTree(function(results) {
-			resolve(results || []);
-		});
+		chrome.bookmarks.getTree(function(results) { resolve(results || []); });
 	});
 }
 
@@ -69,20 +62,28 @@ var prefetchedData = {
 	children: {}    // id -> array of child nodes
 };
 
-// Get all column root IDs from localStorage
-function getColumnIds() {
-	var columnIds = [];
+// Iterate over column storage entries, calling fn(x, y, id) for each
+// If fn returns false, stop iteration. Returns array of [x, y] pairs visited.
+function forEachColumnEntry(fn) {
 	for (var x = 0; ; x++) {
+		var foundInRow = false;
 		for (var y = 0; ; y++) {
 			var id = localStorage.getItem('column.' + x + '.' + y);
 			if (id) {
-				columnIds.push(id);
+				foundInRow = true;
+				if (fn && fn(x, y, id) === false) return;
 			} else {
 				break;
 			}
 		}
-		if (y === 0) break;
+		if (!foundInRow) break;
 	}
+}
+
+// Get all column root IDs from localStorage
+function getColumnIds() {
+	var columnIds = [];
+	forEachColumnEntry(function(x, y, id) { columnIds.push(id); });
 	return columnIds;
 }
 
@@ -582,21 +583,12 @@ function renderMenu(items, x, y) {
     };
 
     setTimeout(function () {
-        document.onclick = function () {
-            closeMenu(ul);
-            return true;
-        };
-        document.onmousedown = function () {
-            closeMenu(ul);
-            return true;
-        };
-        document.oncontextmenu = function () {
-            closeMenu(ul);
-            return true;
-        };
+        var closeHandler = function () { closeMenu(ul); return true; };
+        document.onclick = closeHandler;
+        document.onmousedown = closeHandler;
+        document.oncontextmenu = closeHandler;
         document.onkeydown = function (event) {
-            if (event.keyCode === 27)
-                closeMenu(ul);
+            if (event.keyCode === 27) closeMenu(ul);
             return true;
         };
     }, 20);
@@ -762,17 +754,10 @@ function getDropX(target) {
 
 // gets y coordinate of drop target
 function getDropY(target, event) {
-    let y = null;
+    if (target.tagName !== 'LI' && target.tagName !== 'UL') return null;
+    let y = isAbove(event.pageY, target) ? 1 : 0;
     if (target.tagName === 'LI') {
-        y = 0;
-        if (isAbove(event.pageY, target))
-            y++;
-        for (; target.previousSibling; y++)
-            target = target.previousSibling;
-    } else if (target.tagName === 'UL') {
-        y = 0;
-        if (isAbove(event.pageY, target))
-            y++;
+        for (; target.previousSibling; y++) target = target.previousSibling;
     }
     return y;
 }
@@ -813,100 +798,60 @@ function updateTooltips() {
 
 // gets function that returns children of node
 function getChildrenFunction(node) {
-    // Special folders
-    if (specialFolderIds.indexOf(node.id) !== -1) {
-        return function (callback) {
-            getCachedChildren(node.id, callback);
-        };
-    }
-
-    // Regular folders with children already known
-    if (node.children) {
-        return function (callback) {
-            // If children is just a boolean marker, fetch actual children
-            if (node.children === true) {
-                getCachedChildren(node.id, callback);
-            } else {
-                callback(node.children);
-            }
-        };
-    }
-
-    // Folder without children loaded yet
     return function (callback) {
+        // If children is an array (already loaded), use it directly
+        if (Array.isArray(node.children)) {
+            callback(node.children);
+            return;
+        }
+        // Otherwise fetch from cache (handles special folders, boolean markers, and unloaded folders)
         getCachedChildren(node.id, function(children) {
             if (children) {
                 callback(children);
-            } else {
+            } else if (coords[node.id]) {
                 // remove missing bookmark locations
-                if (coords[node.id])
-                    removeRow(coords[node.id].x, coords[node.id].y);
+                removeRow(coords[node.id].x, coords[node.id].y);
             }
         });
     };
 }
 
+// Special folder definitions for getSubTree
+var specialFolderDefs = {
+    top: {title: 'Most visited', id: 'top', children: true},
+    apps: {title: 'Apps', id: 'apps', url: 'chrome://apps'},
+    recent: {title: 'Recent bookmarks', id: 'recent', children: true},
+    closed: {title: 'Recently closed', id: 'closed', children: true},
+    devices: {title: 'Other devices', id: 'devices', children: true}
+};
+
 // gets the subtree for given id
 function getSubTree(id, callback) {
-    switch (id) {
-        case 'top':
-            callback([{title: 'Most visited', id: 'top', children: true}]);
-            break;
-        case 'apps':
-            callback([{title: 'Apps', id: 'apps', url: 'chrome://apps'}]);
-            break;
-        case 'recent':
-            callback([{title: 'Recent bookmarks', id: 'recent', children: true}]);
-            break;
-        case 'closed':
-            callback([{title: 'Recently closed', id: 'closed', children: true}]);
-            break;
-        case 'devices':
-            callback([{title: 'Other devices', id: 'devices', children: true}]);
-            break;
-        default:
-            // Use cached node data instead of fetching entire subtree
-            getCachedNode(id, function(nodes) {
-                if (nodes && nodes[0]) {
-                    // Mark as folder if it has children (will be fetched on demand)
-                    var node = nodes[0];
-                    // Check if this folder has children by looking at cache or checking if it's a folder
-                    if (prefetchedData.children.hasOwnProperty(id)) {
-                        node.children = prefetchedData.children[id];
-                    } else {
-                        // Mark as having children (actual children fetched on demand)
-                        node.children = true;
-                    }
-                    callback([node]);
-                } else {
-                    // remove missing bookmark locations
-                    if (coords[id])
-                        removeRow(coords[id].x, coords[id].y);
-                }
-            });
+    if (specialFolderDefs[id]) {
+        callback([specialFolderDefs[id]]);
+        return;
     }
+    // Use cached node data instead of fetching entire subtree
+    getCachedNode(id, function(nodes) {
+        if (nodes && nodes[0]) {
+            var node = nodes[0];
+            node.children = prefetchedData.children.hasOwnProperty(id) ? prefetchedData.children[id] : true;
+            callback([node]);
+        } else if (coords[id]) {
+            removeRow(coords[id].x, coords[id].y);
+        }
+    });
 }
+
+// IDs that get their own CSS class
+var specialClassIds = ['top', 'apps', 'recent', 'closed', 'devices', 'empty'];
 
 // sets css classes for node
 function setClass(target, node, isopen) {
-    if (node.className)
-        target.classList.add(node.className);
-    if (node.children)
-        target.classList.add('folder');
-    if (isopen)
-        target.classList.add('open');
-    else
-        target.classList.remove('open');
-
-    switch (node.id) {
-        case 'top':
-        case 'apps':
-        case 'recent':
-        case 'closed':
-        case 'devices':
-        case 'empty':
-            target.classList.add(node.id);
-    }
+    if (node.className) target.classList.add(node.className);
+    if (node.children) target.classList.add('folder');
+    target.classList.toggle('open', !!isopen);
+    if (specialClassIds.indexOf(node.id) !== -1) target.classList.add(node.id);
 }
 
 // gets best icon for a node
@@ -1145,17 +1090,7 @@ function loadColumns() {
 // saves current column configuration to storage
 function saveColumns() {
     // clear previous config
-    for (var x = 0; ; x++) {
-        for (var y = 0; ; y++) {
-            const id = localStorage.getItem('column.' + x + '.' + y);
-            if (id)
-                localStorage.removeItem('column.' + x + '.' + y);
-            else
-                break;
-        }
-        if (y === 0)
-            break;
-    }
+    forEachColumnEntry(function(x, y) { localStorage.removeItem('column.' + x + '.' + y); });
     verifyColumns();
     // save new config
     for (var x = 0; x < columns.length; x++) {
@@ -1167,24 +1102,28 @@ function saveColumns() {
     loadColumns();
 }
 
-// creates and saves a new column
-function addColumn(ids, index) {
-    const column = ids.slice(0);
-    // remove previous locations
+// removes ids from columns, returns adjusted {xpos, ypos} if provided
+function removeIdsFromColumns(ids, xpos, ypos) {
     for (let x = 0; x < columns.length; x++) {
-        for (let y = 0; y < columns[x].length; y++) {
+        for (let y = columns[x].length - 1; y >= 0; y--) {
             if (ids.indexOf(columns[x][y]) > -1) {
                 columns[x].splice(y, 1);
-                y--;
+                if (xpos !== undefined && x === xpos && ypos > y) ypos--;
             }
         }
+        if (columns[x].length === 0) {
+            columns.splice(x, 1);
+            if (xpos !== undefined && xpos > x) xpos--;
+            x--;
+        }
     }
-    // insert new id
-    if (index == null)
-        index = columns.length;
-    columns.splice(Math.min(index, columns.length), 0, column);
+    return {xpos: xpos, ypos: ypos};
+}
 
-    // save
+// creates and saves a new column
+function addColumn(ids, index) {
+    removeIdsFromColumns(ids);
+    columns.splice(Math.min(index == null ? columns.length : index, columns.length), 0, ids.slice(0));
     saveColumns();
 }
 
@@ -1196,28 +1135,9 @@ function removeColumn(index) {
 
 // creates and saves a new row
 function addRow(id, xpos, ypos) {
-    if (ypos == null)
-        ypos = columns[xpos].length;
-
-    // remove previous locations
-    for (let x = 0; x < columns.length; x++) {
-        const i = columns[x].indexOf(id);
-        if (i > -1) {
-            columns[x].splice(i, 1);
-            if (x === xpos && ypos > i)
-                ypos--;
-        }
-        if (columns[x].length === 0) {
-            columns.splice(x, 1);
-            x--;
-            if (xpos > x)
-                xpos--;
-        }
-    }
-    // insert new id
-    columns[xpos].splice(Math.min(ypos, columns[xpos].length), 0, id);
-
-    // save
+    if (ypos == null) ypos = columns[xpos].length;
+    var adjusted = removeIdsFromColumns([id], xpos, ypos);
+    columns[adjusted.xpos].splice(Math.min(adjusted.ypos, columns[adjusted.xpos].length), 0, id);
     saveColumns();
 }
 
@@ -1231,52 +1151,40 @@ function removeRow(xpos, ypos) {
 function getClosed(callback) {
     const maxResults = getConfig('number_closed');
     chrome.sessions.getRecentlyClosed({maxResults: maxResults}, function (sessions) {
-        const nodes = [];
-        for (let i = 0; i < sessions.length && i < maxResults; i++) {
-            (function (session) {
-                if (session.window && session.window.tabs.length === 1)
-                    session.tab = session.window.tabs[0];
-
-                nodes.push({
-                    title: session.tab ? session.tab.title : session.window.tabs.length + ' Tabs',
-                    url: session.tab ? session.tab.url : null,
-                    className: session.window ? 'window' : null,
-                    action: function () {
-                        chrome.sessions.restore(session.window ? session.window.sessionId : session.tab.sessionId, function () {
-                            refreshClosed();
-                        });
-                        return false;
-                    }
-                });
-            })(sessions[i]);
-        }
+        const nodes = sessions.slice(0, maxResults).map(function(session) {
+            if (session.window && session.window.tabs.length === 1)
+                session.tab = session.window.tabs[0];
+            const sessionId = session.window ? session.window.sessionId : session.tab.sessionId;
+            return {
+                title: session.tab ? session.tab.title : session.window.tabs.length + ' Tabs',
+                url: session.tab ? session.tab.url : null,
+                className: session.window ? 'window' : null,
+                action: function () {
+                    chrome.sessions.restore(sessionId, refreshClosed);
+                    return false;
+                }
+            };
+        });
         callback(nodes);
     });
 }
 
 function getDevices(callback) {
     chrome.sessions.getDevices({maxResults: getConfig('number_closed')}, function (devices) {
-        const nodes = [];
-        for (let i = 0; i < devices.length; i++) {
-            (function (device) {
-                const children = [];
-                for (let j = 0; j < device.sessions.length; j++) {
-                    const session = device.sessions[j];
-                    const tabs = session.window ? session.window.tabs : [session.tab];
-                    for (let k = 0; k < tabs.length; k++) {
-                        children.push({
-                            title: tabs[k].title,
-                            url: tabs[k].url
-                        });
-                    }
-                }
-                nodes.push({
-                    id: 'device.' + device.deviceName,
-                    title: device.deviceName,
-                    children: children
+        const nodes = devices.map(function(device) {
+            const children = [];
+            device.sessions.forEach(function(session) {
+                var tabs = session.window ? session.window.tabs : [session.tab];
+                tabs.forEach(function(tab) {
+                    children.push({title: tab.title, url: tab.url});
                 });
-            })(devices[i]);
-        }
+            });
+            return {
+                id: 'device.' + device.deviceName,
+                title: device.deviceName,
+                children: children
+            };
+        });
         callback(nodes);
     });
 }
