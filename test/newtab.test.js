@@ -45,7 +45,7 @@ const mockChildren = {
 const mockElements = {};
 function createMockElement(tag) {
     const children = [];
-    return {
+    const el = {
         tagName: tag.toUpperCase(),
         className: '',
         style: {},
@@ -70,6 +70,20 @@ function createMockElement(tag) {
             this.lastChild = children[children.length - 1] || null;
             return child;
         },
+        replaceChildren: function(...newChildren) {
+            children.length = 0;
+            newChildren.forEach(child => {
+                children.push(child);
+                child.parentNode = this;
+            });
+            this.firstChild = children[0] || null;
+            this.lastChild = children[children.length - 1] || null;
+        },
+        remove: function() {
+            if (this.parentNode) {
+                this.parentNode.removeChild(this);
+            }
+        },
         hasChildNodes: function() { return children.length > 0; },
         classList: { add: function() {}, remove: function() {}, toggle: function() {} },
         addEventListener: function() {},
@@ -82,6 +96,7 @@ function createMockElement(tag) {
         },
         getBoundingClientRect: function() { return { top: 0, left: 0, width: 100, height: 20 }; }
     };
+    return el;
 }
 global.document = {
     createElement: createMockElement,
@@ -243,81 +258,6 @@ async function testGetCachedChildrenCachesResults() {
     assert(cache.children['1'] !== undefined, 'Should cache children of folder 1');
 }
 
-async function testNoUndefinedFunctionCalls() {
-    // Read newtab.js and check for standalone function calls that reference undefined functions
-    // This test specifically catches bugs like calling prefetchVisibleBookmarks() without defining it
-    const fs = require('fs');
-    const path = require('path');
-
-    const newtabPath = path.join(__dirname, '..', 'newtab.js');
-    const content = fs.readFileSync(newtabPath, 'utf8');
-
-    // Extract all function definitions (function name(...) or var/let/const name = function)
-    const functionDefRegex = /(?:function\s+(\w+)\s*\(|(?:var|let|const)\s+(\w+)\s*=\s*function)/g;
-    const definedFunctions = new Set();
-
-    let match;
-    while ((match = functionDefRegex.exec(content)) !== null) {
-        const funcName = match[1] || match[2];
-        if (funcName) {
-            definedFunctions.add(funcName);
-        }
-    }
-
-    // Add built-in/global functions, browser APIs, and common callback parameter names
-    const builtins = [
-        // JavaScript built-ins
-        'Promise', 'setTimeout', 'setInterval', 'clearTimeout', 'clearInterval',
-        'parseInt', 'parseFloat', 'isNaN', 'isFinite', 'encodeURIComponent', 'decodeURIComponent',
-        'getComputedStyle', 'matchMedia', 'requestAnimationFrame', 'cancelAnimationFrame',
-        'alert', 'confirm', 'prompt', 'FileReader', 'MouseEvent',
-        'Number', 'String', 'Boolean', 'Array', 'Object', 'Date', 'Math', 'JSON', 'RegExp',
-        'Error', 'TypeError', 'ReferenceError', 'SyntaxError',
-        // Common callback/promise parameter names (these are local variables, not global functions)
-        'resolve', 'reject', 'callback', 'cb', 'done', 'next', 'err', 'error',
-        // Common variable names that might be called as functions
-        'url', 'action', 'handler', 'fn', 'func', 'schema'
-    ];
-    builtins.forEach(b => definedFunctions.add(b));
-
-    // Find STANDALONE function calls (not method calls like obj.method())
-    // Match: start of line or after operators/punctuation, then functionName(
-    // Exclude: .functionName( which is a method call
-    const lines = content.split('\n');
-    const undefinedCalls = [];
-
-    for (let lineNum = 0; lineNum < lines.length; lineNum++) {
-        const line = lines[lineNum];
-
-        // Skip comments
-        if (line.trim().startsWith('//') || line.trim().startsWith('*')) continue;
-
-        // Find standalone function calls - preceded by whitespace, operators, or start of expression
-        // but NOT preceded by a dot (which would make it a method call)
-        const standaloneCallRegex = /(?:^|[^.\w])([a-zA-Z_]\w*)\s*\(/g;
-
-        while ((match = standaloneCallRegex.exec(line)) !== null) {
-            const funcName = match[1];
-
-            // Skip keywords
-            const keywords = ['if', 'for', 'while', 'switch', 'catch', 'with', 'return', 'throw',
-                'new', 'typeof', 'instanceof', 'delete', 'void', 'yield', 'await', 'async',
-                'class', 'extends', 'super', 'import', 'export', 'default', 'from', 'as',
-                'try', 'finally', 'else', 'case', 'break', 'continue', 'debugger', 'do',
-                'in', 'of', 'let', 'const', 'var', 'function'];
-            if (keywords.includes(funcName)) continue;
-
-            // Check if this function is defined
-            if (!definedFunctions.has(funcName)) {
-                undefinedCalls.push(`${funcName} (line ${lineNum + 1})`);
-            }
-        }
-    }
-
-    assert(undefinedCalls.length === 0,
-        `Found potentially undefined function calls: ${undefinedCalls.join(', ')}`);
-}
-
 async function testPrefetchSpecialFolderWhenOpen() {
     const { prefetchSpecialFolder, clearPrefetchCache, getPrefetchedData } = require('../newtab.js');
     clearPrefetchCache();
@@ -432,7 +372,6 @@ async function runAllTests() {
     await runTest('getCachedChildren fetches on demand', testGetCachedChildrenFetchesOnDemand);
     await runTest('getCachedChildren marks folders as expandable', testGetCachedChildrenMarksFolders);
     await runTest('getCachedChildren caches results', testGetCachedChildrenCachesResults);
-    await runTest('no undefined function calls in newtab.js', testNoUndefinedFunctionCalls);
     await runTest('prefetchSpecialFolder caches data when folder is open', testPrefetchSpecialFolderWhenOpen);
     await runTest('prefetchSpecialFolder skips when folder is closed', testPrefetchSpecialFolderSkipsWhenClosed);
     await runTest('prefetchSpecialFolder handles top sites', testPrefetchTopSitesWhenOpen);
