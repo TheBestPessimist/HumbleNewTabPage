@@ -2,7 +2,7 @@
 
 // render a single bookmark node
 function render(node, target) {
-    if (node.description == 'separator') return;
+    if (node.description === 'separator') return;
 
     var li = document.createElement('li');
     var a = document.createElement('a');
@@ -28,10 +28,10 @@ function render(node, target) {
         };
     } else if (url) {
         var newtab = getConfig('newtab');
-        if (newtab == 1) {
+        if (newtab === 1) {
             // new foreground tab
             a.target = '_blank';
-        } else if (newtab == 2) {
+        } else if (newtab === 2) {
             // new background tab
             a.onclick = function (e) {
                 openLink(node, newtab);
@@ -46,7 +46,7 @@ function render(node, target) {
                 return false;
             };
             a.onauxclick = function (e) {
-                if (e.button == 1) {
+                if (e.button === 1) {
                     openLink(node, 2);
                     return false;
                 }
@@ -72,7 +72,7 @@ function render(node, target) {
         addFolderHandlers(node, a);
         enableDragFolder(node, a);
 
-    } else if (node.id == 'apps')
+    } else if (node.id === 'apps')
         enableDragFolder(node, a);
 
     target.appendChild(li);
@@ -105,7 +105,7 @@ function renderAll(nodes, target, toplevel) {
 // render column with given index
 function renderColumn(index, target) {
     var ids = columns[index];
-    if (ids.length == 1 && !getConfig('show_root'))
+    if (ids.length === 1 && !getConfig('show_root'))
         getChildrenFunction({id: ids[0]})(function (result) {
             renderAll(result, target);
             addColumnHandlers(index, target);
@@ -226,7 +226,7 @@ function addColumnHandlers(index, ul) {
     var ids = columns[index];
 
     // single folder items
-    if (ids.length == 1)
+    if (ids.length === 1)
         items = getMenuItems({id: ids[0]});
 
     // column layout items
@@ -252,7 +252,7 @@ function addColumnHandlers(index, ul) {
                 removeColumn(index);
             }
         });
-        if (ids.length == 1) {
+        if (ids.length === 1) {
             if (index > 0)
                 items.push({
                     label: 'Move folder left',
@@ -272,7 +272,7 @@ function addColumnHandlers(index, ul) {
 
     if (items.length > 0)
         ul.oncontextmenu = function (event) {
-            if (event.target.tagName == 'A' || event.target.parentNode.tagName == 'A')
+            if (event.target.tagName === 'A' || event.target.parentNode.tagName === 'A')
                 return true;
             renderMenu(items, event.pageX, event.pageY);
             return false;
@@ -288,14 +288,14 @@ function getMenuItems(node) {
             openLinks(node);
         }
     });
-    if (node.id == 'closed')
+    if (node.id === 'closed')
         items.push({
             label: 'Clear browsing data',
             action: function () {
                 openLink({url: 'chrome://settings/clearBrowserData'}, 1);
             }
         });
-    if (node.id == 'devices')
+    if (node.id === 'devices')
         items.push({
             label: 'History',
             action: function () {
@@ -362,7 +362,7 @@ function renderMenu(items, x, y) {
             return true;
         };
         document.onkeydown = function (event) {
-            if (event.keyCode == 27)
+            if (event.keyCode === 27)
                 closeMenu(ul);
             return true;
         };
@@ -441,7 +441,7 @@ function enableDragDrop() {
             clearDropTarget();
             dropTarget = target;
             var bordercss = 'solid 2px ' + getConfig('font_color');
-            if (target.tagName == 'LI' || target.tagName == 'UL') {
+            if (target.tagName === 'LI' || target.tagName === 'UL') {
                 if (isAbove(event.pageY, target)) {
                     target.style.borderBottom = bordercss;
                     target.style.margin = '0 0 -2px 0';
@@ -449,7 +449,7 @@ function enableDragDrop() {
                     target.style.borderTop = bordercss;
                     target.style.margin = '-2px 0 0 0';
                 }
-            } else if (target.className == 'column') {
+            } else if (target.className === 'column') {
                 if (event.pageX - target.offsetLeft > target.clientWidth / 2) {
                     target.style.borderRight = bordercss;
                     target.style.margin = '0';
@@ -477,7 +477,7 @@ function enableDragDrop() {
         var x = getDropX(target, event);
         var y = getDropY(target, event);
 
-        if (dragIds.length == 1 && y != null)
+        if (dragIds.length === 1 && y != null)
             addRow(dragIds[0], x, y);
         else {
             if (event.pageX - target.offsetLeft > target.clientWidth / 2)
@@ -494,21 +494,21 @@ function getDropTarget(event) {
     if (!dragIds)
         return null;
     var target = event.target;
-    if (target && (target.tagName == 'A' || target.parentNode.tagName == 'A') && dragIds.length == 1) {
+    if (target && (target.tagName === 'A' || target.parentNode.tagName === 'A') && dragIds.length === 1) {
         // get parent folder until toplevel
         while (target &&
         target.parentNode.parentNode &&
-        target.parentNode.parentNode.className != 'column') {
+        target.parentNode.parentNode.className !== 'column') {
             // target should be LI
             target = target.parentNode;
         }
         // if single-folder column, get the UL
-        if (target && target.tagName == 'LI' &&
-            columns[getDropX(target, event)].length == 1)
+        if (target && target.tagName === 'LI' &&
+            columns[getDropX(target, event)].length === 1)
             target = target.parentNode;
         // target should be LI or UL by here...
     } else
-        while (target && target.className != 'column')
+        while (target && target.className !== 'column')
             target = target.parentNode;// target column
 
     return target;
@@ -517,7 +517,7 @@ function getDropTarget(event) {
 // gets x coordinate of drop target
 function getDropX(target, event) {
     var x = null;
-    while (target && target.className != 'column')
+    while (target && target.className !== 'column')
         target = target.parentNode;
     if (target) {
         x = 0;
@@ -530,13 +530,13 @@ function getDropX(target, event) {
 // gets y coordinate of drop target
 function getDropY(target, event) {
     var y = null;
-    if (target.tagName == 'LI') {
+    if (target.tagName === 'LI') {
         y = 0;
         if (isAbove(event.pageY, target))
             y++;
         for (; target.previousSibling; y++)
             target = target.previousSibling;
-    } else if (target.tagName == 'UL') {
+    } else if (target.tagName === 'UL') {
         y = 0;
         if (isAbove(event.pageY, target))
             y++;
@@ -721,7 +721,7 @@ function toggle(node, a) {
         if (a.nextSibling) {
             // auto-close child folders
             if (getConfig('auto_close')) {
-                var children = (a.nextSibling.tagName == 'DIV' ? a.nextSibling.firstChild : a.nextSibling).children;
+                var children = (a.nextSibling.tagName === 'DIV' ? a.nextSibling.firstChild : a.nextSibling).children;
                 for (var i = 0; i < children.length; i++) {
                     var child = children[i].firstChild;
                     if (child.open)
@@ -739,7 +739,7 @@ function toggle(node, a) {
             var siblings = a.parentNode.parentNode.children;
             for (var i = 0; i < siblings.length; i++) {
                 var sibling = siblings[i].firstChild;
-                if (sibling != a && sibling.open)
+                if (sibling !== a && sibling.open)
                     sibling.onclick();
             }
         }
@@ -811,7 +811,7 @@ function openLink(node, newtab) {
     if (url) {
         chrome.tabs.getCurrent(function (tab) {
             if (newtab)
-                chrome.tabs.create({url: url, active: (newtab == 1), openerTabId: tab.id});
+                chrome.tabs.create({url: url, active: (newtab === 1), openerTabId: tab.id});
             else
                 chrome.tabs.update(tab.id, {url: url});
         });
@@ -829,7 +829,7 @@ function verifyColumns() {
     if (columns.length === 0) {
         columns.push([]);
         columns.push(special.filter(function (a) {
-            return getConfig('show_' + a) != false;
+            return getConfig('show_' + a) !== false;
         }));
     }
 
@@ -846,7 +846,7 @@ function verifyColumns() {
     // add missing root items
     var column = columns[0];
     for (var i = 0; i < missing.length; i++) {
-        if (getConfig('show_' + missing[i]) != false)
+        if (getConfig('show_' + missing[i]) !== false)
             column.push(missing[i]);
     }
 
@@ -955,7 +955,7 @@ function addRow(id, xpos, ypos) {
         var i = columns[x].indexOf(id);
         if (i > -1) {
             columns[x].splice(i, 1);
-            if (x == xpos && ypos > i)
+            if (x === xpos && ypos > i)
                 ypos--;
         }
         if (columns[x].length === 0) {
@@ -985,7 +985,7 @@ function getClosed(callback) {
         var nodes = [];
         for (var i = 0; i < sessions.length && i < maxResults; i++) {
             (function (session) {
-                if (session.window && session.window.tabs.length == 1)
+                if (session.window && session.window.tabs.length === 1)
                     session.tab = session.window.tabs[0];
 
                 nodes.push({
@@ -1198,17 +1198,17 @@ function setConfig(key, value) {
         value = (theme.hasOwnProperty(key) ? theme[key] : config[key]);
     }
     // special case settings
-    if (key == 'lock' || key == 'newtab' || key == 'show_root' || key.substring(0, 6) == 'number')
+    if (key === 'lock' || key === 'newtab' || key === 'show_root' || key.substring(0, 6) === 'number')
         loadColumns();
-    else if (key == 'theme') {
+    else if (key === 'theme') {
         theme = themes[value];
         for (var i in config) {
-            if (i != key) {
+            if (i !== key) {
                 onChange(i);
                 showConfig(i);
             }
         }
-    } else if (key.substring(0, 4) == 'show') {
+    } else if (key.substring(0, 4) === 'show') {
         var id = key.substring(5);
         if (!value) {
             if (coords[id])
@@ -1310,7 +1310,7 @@ function onChange(key, value) {
     if (value == null)
         value = getConfig(key);
 
-    if (value != config[key]) {
+    if (value !== config[key]) {
         var css = getStyle(key, value);
         if (css) {
             var style;
@@ -1331,11 +1331,11 @@ function onChange(key, value) {
         delete styles[key];
     }
     // refresh dependent values
-    if (key == 'width')
+    if (key === 'width')
         onChange('h_pos');
-    else if (key == 'shadow_blur')
+    else if (key === 'shadow_blur')
         onChange('shadow_color');
-    else if (key == 'auto_scale') {
+    else if (key === 'auto_scale') {
         onChange('width');
         onChange('v_margin');
     }
@@ -1347,7 +1347,7 @@ function onChange(key, value) {
     // show/hide default button
     var input = document.getElementById('options_' + key);
     if (input) {
-        var isDefault = value == (theme.hasOwnProperty(key) ? theme[key] : config[key]);
+        var isDefault = value === (theme.hasOwnProperty(key) ? theme[key] : config[key]);
         input.reset.style.visibility = (isDefault ? 'hidden' : null);
         if (input.swatch)
             input.swatch.value = value;
@@ -1383,7 +1383,7 @@ function initConfig(key) {
     if (!input)
         return;
 
-    if (input.type == 'color') {
+    if (input.type === 'color') {
         input.type = 'text';
         input.className = 'color';
         var swatch = document.createElement('input');
@@ -1397,9 +1397,9 @@ function initConfig(key) {
         input.parentNode.appendChild(swatch);
     }
     input.onchange = function (event) {
-        if (input.type == 'file') {
+        if (input.type === 'file') {
             // load file
-            if (event.target.files.length == 1) {
+            if (event.target.files.length === 1) {
                 var file = event.target.files[0];
                 if (file.size > 2097152) {
                     input.value = null;
@@ -1414,7 +1414,7 @@ function initConfig(key) {
                 reader.readAsDataURL(file);
             }
         } else
-            setConfig(key, input.type == 'checkbox' ? Number(input.checked) : input.value);
+            setConfig(key, input.type === 'checkbox' ? Number(input.checked) : input.value);
     };
 
     var reset = document.createElement('a');
@@ -1464,7 +1464,7 @@ function initSettings() {
                 allcss.value = '';
                 for (var key in config) {
                     var css = (getStyle(key, getConfig(key)));
-                    if (css && css.length < 1000 && key != 'css')
+                    if (css && css.length < 1000 && key !== 'css')
                         allcss.value += css + '\n';
                 }
             }
@@ -1473,7 +1473,7 @@ function initSettings() {
                 var exports = document.getElementById('options_export');
                 var imports = document.getElementById('options_import');
                 var replacer = function (key, value) {
-                    if (key == 'options.background_image_file' || key == 'weather.cache') {
+                    if (key === 'options.background_image_file' || key === 'weather.cache') {
                         return undefined;
                     }
                     return value;
@@ -1543,7 +1543,7 @@ function initSettings() {
             for (var i in themes) {
                 var option = document.createElement('option');
                 option.innerText = i;
-                if (i == getConfig('theme'))
+                if (i === getConfig('theme'))
                     option.selected = 'selected';
                 select.appendChild(option);
             }
@@ -1561,7 +1561,7 @@ function initSettings() {
                     var font = fonts[i].fontId;
                     var option = document.createElement('option');
                     option.innerText = font;
-                    if (font == getConfig('font'))
+                    if (font === getConfig('font'))
                         option.selected = 'selected';
                     select.appendChild(option);
                 }
@@ -1587,7 +1587,7 @@ loadColumns();
 
 // keyboard shortcuts
 document.addEventListener('keypress', function (event) {
-    if (event.keyCode == 13 && event.target && event.target.onclick && event.target.tagName == 'A') {
+    if (event.keyCode === 13 && event.target && event.target.onclick && event.target.tagName === 'A') {
         event.target.dispatchEvent(new MouseEvent('click'));
         event.preventDefault();
     }
