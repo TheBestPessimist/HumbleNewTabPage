@@ -1611,6 +1611,14 @@ function initSettings() {
         return false;
     };
 
+    // clear cache button
+    document.getElementById('options_clear_cache').onclick = async function () {
+        console.log('Favicon cache stats before clear:', await FaviconCache.getStats());
+        await FaviconCache.clear();
+        console.log('Favicon cache cleared');
+        console.log('Favicon cache stats after clear:', await FaviconCache.getStats());
+    };
+
     // options submenu navigation
     const options = document.getElementById('options');
     const nav = document.getElementById('options_nav');
