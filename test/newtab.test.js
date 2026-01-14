@@ -306,6 +306,42 @@ async function testPrefetchTopSitesWhenOpen() {
     assert(cache.children['top'].length === 3, 'Should have 3 top sites');
 }
 
+async function testGetCachedChildrenUsesPreloadedSpecialFolder() {
+    const { getCachedChildren, clearPrefetchCache, getPrefetchedData } = require('../newtab-functions.js');
+    clearPrefetchCache();
+
+    // Simulate prefetched data for a special folder (as if prefetchSpecialFolder ran)
+    const cache = getPrefetchedData();
+    const prefetchedRecent = [
+        { id: 'r1', title: 'Recent 1', url: 'https://recent1.com' },
+        { id: 'r2', title: 'Recent 2', url: 'https://recent2.com' }
+    ];
+    cache.children['recent'] = prefetchedRecent;
+
+    // Track if fetchSpecialFolderData would be called (it shouldn't be on first call)
+    let fetchCalled = false;
+    const originalFetch = global.chrome.bookmarks.getRecent;
+    global.chrome.bookmarks.getRecent = function(count, callback) {
+        fetchCalled = true;
+        callback([{ id: 'new', title: 'New', url: 'https://new.com' }]);
+    };
+
+    // First call should use cached data, not fetch
+    const result = await new Promise(resolve => {
+        getCachedChildren('recent', resolve);
+    });
+
+    assert(!fetchCalled, 'First call should use prefetched cache, not fetch');
+    assert(result.length === 2, `Should return prefetched data (2 items), got ${result.length}`);
+    assert(result[0].id === 'r1', 'Should return the prefetched items');
+
+    // Cache should be consumed (deleted) for special folders
+    assert(cache.children['recent'] === undefined, 'Cache should be consumed after first use for special folders');
+
+    // Restore
+    global.chrome.bookmarks.getRecent = originalFetch;
+}
+
 // Run all tests
 async function runAllTests() {
     console.log('Running bookmark loading optimization tests...\n');
@@ -318,6 +354,7 @@ async function runAllTests() {
     await runTest('prefetchSpecialFolder caches data when folder is open', testPrefetchSpecialFolderWhenOpen);
     await runTest('prefetchSpecialFolder skips when folder is closed', testPrefetchSpecialFolderSkipsWhenClosed);
     await runTest('prefetchSpecialFolder handles top sites', testPrefetchTopSitesWhenOpen);
+    await runTest('getCachedChildren uses preloaded special folder data', testGetCachedChildrenUsesPreloadedSpecialFolder);
 
     console.log(`\nResults: ${testsPassed} passed, ${testsFailed} failed`);
     process.exit(testsFailed > 0 ? 1 : 0);

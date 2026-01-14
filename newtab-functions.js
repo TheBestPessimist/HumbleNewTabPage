@@ -7,6 +7,7 @@
 
 // Special folder IDs that are handled differently
 const special = ['apps', 'top', 'recent', 'closed', 'devices'];
+const specialFolderIds = ['top', 'recent', 'closed', 'devices'];
 
 // Cache for prefetched bookmark data
 var prefetchedData = {
@@ -40,11 +41,51 @@ function getColumnIds() {
     return columnIds;
 }
 
+// Fetch special folder data
+function fetchSpecialFolderData(id) {
+    return new Promise(function(resolve) {
+        switch (id) {
+            case 'top':
+                if (chrome.topSites) {
+                    chrome.topSites.get(function(result) {
+                        resolve((result || []).slice(0, getConfigValue('number_top', 10)));
+                    });
+                } else {
+                    resolve([]);
+                }
+                break;
+            case 'recent':
+                chrome.bookmarks.getRecent(getConfigValue('number_recent', 10), function(result) {
+                    resolve(result || []);
+                });
+                break;
+            case 'closed':
+            case 'devices':
+                // These require more complex handling in the real code
+                resolve([]);
+                break;
+            default:
+                resolve([]);
+        }
+    });
+}
+
 // Get cached children or fetch on demand
 // Marks folders (nodes without url) as expandable
 function getCachedChildren(id, callback) {
+    // Use cache if available
     if (prefetchedData.children.hasOwnProperty(id)) {
         callback(prefetchedData.children[id]);
+        // Special folders: consume cache (delete after use) so next open fetches fresh
+        if (specialFolderIds.indexOf(id) !== -1) {
+            delete prefetchedData.children[id];
+        }
+        return;
+    }
+
+    // Fetch based on folder type
+    if (specialFolderIds.indexOf(id) !== -1) {
+        fetchSpecialFolderData(id).then(callback);
     } else {
         getBookmarkChildren(id).then(function(children) {
             // Mark folders (nodes without url) as having children
