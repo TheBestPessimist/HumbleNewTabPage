@@ -33,7 +33,7 @@ function render(node, target) {
             a.target = '_blank';
         } else if (newtab === 2) {
             // new background tab
-            a.onclick = function (e) {
+            a.onclick = function () {
                 openLink(node, newtab);
                 return false;
             };
@@ -393,7 +393,7 @@ function enableDragColumn(id, column) {
         event.dataTransfer.effectAllowed = 'move';
         this.classList.add('dragstart');
     };
-    column.ondragend = function (event) {
+    column.ondragend = function () {
         dragIds = null;
         this.classList.remove('dragstart');
         clearDropTarget();
@@ -414,7 +414,7 @@ function enableDragFolder(node, a) {
         event.dataTransfer.effectAllowed = 'move copy';
         this.classList.add('dragstart');
     };
-    a.ondragend = function (event) {
+    a.ondragend = function () {
         dragIds = null;
         this.classList.remove('dragstart');
         clearDropTarget();
@@ -462,7 +462,7 @@ function enableDragDrop() {
         return false;
     };
 
-    main.ondragleave = function (event) {
+    main.ondragleave = function () {
         clearDropTarget();
     };
 
@@ -474,7 +474,7 @@ function enableDragDrop() {
             return false;
 
         // calculate drop coordinates
-        var x = getDropX(target, event);
+        var x = getDropX(target);
         var y = getDropY(target, event);
 
         if (dragIds.length === 1 && y != null)
@@ -504,7 +504,7 @@ function getDropTarget(event) {
         }
         // if single-folder column, get the UL
         if (target && target.tagName === 'LI' &&
-            columns[getDropX(target, event)].length === 1)
+            columns[getDropX(target)].length === 1)
             target = target.parentNode;
         // target should be LI or UL by here...
     } else
@@ -515,7 +515,7 @@ function getDropTarget(event) {
 }
 
 // gets x coordinate of drop target
-function getDropX(target, event) {
+function getDropX(target) {
     var x = null;
     while (target && target.className !== 'column')
         target = target.parentNode;
@@ -797,7 +797,7 @@ function animate(node, a, isopen) {
 
 // opens immediate children of given node in new tabs
 function openLinks(node) {
-    chrome.tabs.getCurrent(function (tab) {
+    chrome.tabs.getCurrent(function () {
         getChildrenFunction(node)(function (result) {
             for (var i = 0; i < result.length; i++)
                 openLink(result[i], 2);
@@ -993,7 +993,7 @@ function getClosed(callback) {
                     url: session.tab ? session.tab.url : null,
                     className: session.window ? 'window' : null,
                     action: function () {
-                        chrome.sessions.restore(session.window ? session.window.sessionId : session.tab.sessionId, function (session) {
+                        chrome.sessions.restore(session.window ? session.window.sessionId : session.tab.sessionId, function () {
                             refreshClosed();
                         });
                         return false;
@@ -1450,7 +1450,7 @@ function initSettings() {
     var index = 0;
     for (var i = 0; i < nav.children.length; i++) {
         var a = nav.children[i].firstChild;
-        a.onclick = function (e) {
+        a.onclick = function () {
             // clear current style
             nav.children[index].firstChild.classList.remove('current');
             options.getElementsByClassName('section')[index].classList.remove('current');
@@ -1592,14 +1592,14 @@ document.addEventListener('keypress', function (event) {
         event.preventDefault();
     }
 });
-document.addEventListener('mousedown', function (event) {
+document.addEventListener('mousedown', function () {
     document.body.classList.add('hide-focus');
 });
-document.addEventListener('keydown', function (event) {
+document.addEventListener('keydown', function () {
     document.body.classList.remove('hide-focus');
 });
 
-window.onresize = function (event) {
+window.onresize = function () {
     updateTooltips();
 };
 
