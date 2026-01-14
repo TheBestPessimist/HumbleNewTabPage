@@ -244,15 +244,18 @@ async function testGetCachedChildrenCachesResults() {
     const { getCachedChildren, clearPrefetchCache, getPrefetchedData } = require('../newtab.js');
     clearPrefetchCache();
 
+    // Record initial API call count (module init may have made some calls)
+    const initialCallCount = apiCalls.getChildren.length;
+
     // First call - should fetch
     await getCachedChildren('1');
 
-    assert(apiCalls.getChildren.length === 1, 'Should have made 1 API call');
+    assert(apiCalls.getChildren.length === initialCallCount + 1, 'Should have made 1 additional API call');
 
     // Second call - should use cache
     await getCachedChildren('1');
 
-    assert(apiCalls.getChildren.length === 1, 'Should still have only 1 API call (cached)');
+    assert(apiCalls.getChildren.length === initialCallCount + 1, 'Should still have only 1 additional API call (cached)');
 
     const cache = getPrefetchedData();
     assert(cache.children['1'] !== undefined, 'Should cache children of folder 1');

@@ -1,6 +1,132 @@
 'use strict';
 
 // =============================================================================
+// PERFORMANCE MEASUREMENT - Remove after debugging
+// =============================================================================
+
+const Perf = {
+    startTime: performance.now(),
+    scriptLoadTime: performance.now(), // When this script started
+    marks: [],
+    operations: [], // Detailed operation log
+    enabled: true,
+    apiCalls: { count: 0, totalTime: 0, calls: [] },
+
+    mark(label) {
+        if (!this.enabled) return;
+        const now = performance.now();
+        const elapsed = now - this.startTime;
+        this.marks.push({ label, time: now, elapsed });
+        // Use Performance API for DevTools integration
+        try { performance.mark(`perf-${label.replace(/\s+/g, '-')}`); } catch(e) {}
+        console.log(`[PERF] ${elapsed.toFixed(2)}ms - ${label}`);
+    },
+
+    // Track Chrome API calls specifically
+    async trackApi(apiName, fn) {
+        if (!this.enabled) return fn();
+        const start = performance.now();
+        const result = await fn();
+        const duration = performance.now() - start;
+        this.apiCalls.count++;
+        this.apiCalls.totalTime += duration;
+        this.apiCalls.calls.push({ api: apiName, duration });
+        console.log(`[PERF:API] ${apiName}: ${duration.toFixed(2)}ms`);
+        return result;
+    },
+
+    // Track any async operation
+    async track(label, fn) {
+        if (!this.enabled) return fn();
+        const start = performance.now();
+        const result = await fn();
+        const duration = performance.now() - start;
+        this.operations.push({ label, duration, timestamp: start - this.startTime });
+        console.log(`[PERF:OP] ${label}: ${duration.toFixed(2)}ms`);
+        return result;
+    },
+
+    summary() {
+        if (!this.enabled) return;
+        const totalTime = performance.now() - this.startTime;
+
+        // Navigation timing (when did the page actually start loading?)
+        const navTiming = performance.getEntriesByType('navigation')[0];
+        const pageLoadStart = navTiming ? navTiming.startTime : 0;
+
+        console.log('\n' + '='.repeat(60));
+        console.log('PERFORMANCE REPORT - Copy everything below this line');
+        console.log('='.repeat(60));
+
+        // Summary stats
+        console.log('\n📊 SUMMARY:');
+        console.log(`  Total JS execution time: ${totalTime.toFixed(2)}ms`);
+        console.log(`  Chrome API calls: ${this.apiCalls.count} calls, ${this.apiCalls.totalTime.toFixed(2)}ms total`);
+        if (navTiming) {
+            console.log(`  DOM Content Loaded: ${navTiming.domContentLoadedEventEnd.toFixed(2)}ms`);
+            console.log(`  Page Load Complete: ${navTiming.loadEventEnd.toFixed(2)}ms`);
+        }
+
+        // Timeline
+        console.log('\n📍 TIMELINE (marks):');
+        let prev = this.startTime;
+        this.marks.forEach(m => {
+            const delta = m.time - prev;
+            const bar = '█'.repeat(Math.min(Math.ceil(delta / 10), 50));
+            console.log(`  ${m.elapsed.toFixed(1).padStart(7)}ms | ${bar} +${delta.toFixed(1)}ms | ${m.label}`);
+            prev = m.time;
+        });
+
+        // Slow operations (>5ms)
+        const slowOps = this.operations.filter(o => o.duration > 5).sort((a,b) => b.duration - a.duration);
+        if (slowOps.length > 0) {
+            console.log('\n🐌 SLOW OPERATIONS (>5ms):');
+            slowOps.forEach(o => {
+                console.log(`  ${o.duration.toFixed(1).padStart(7)}ms | ${o.label}`);
+            });
+        }
+
+        // Chrome API breakdown
+        if (this.apiCalls.calls.length > 0) {
+            console.log('\n🔌 CHROME API CALLS:');
+            const sorted = [...this.apiCalls.calls].sort((a,b) => b.duration - a.duration);
+            sorted.forEach(c => {
+                const bar = '█'.repeat(Math.min(Math.ceil(c.duration / 10), 50));
+                console.log(`  ${c.duration.toFixed(1).padStart(7)}ms | ${bar} | ${c.api}`);
+            });
+        }
+
+        // Diagnosis
+        console.log('\n🔍 DIAGNOSIS:');
+        if (this.apiCalls.totalTime > 100) {
+            console.log(`  ⚠️  Chrome APIs taking ${this.apiCalls.totalTime.toFixed(0)}ms - this is likely the bottleneck`);
+        }
+        const renderOps = this.operations.filter(o => o.label.includes('render'));
+        const renderTime = renderOps.reduce((sum, o) => sum + o.duration, 0);
+        if (renderTime > 50) {
+            console.log(`  ⚠️  Rendering taking ${renderTime.toFixed(0)}ms`);
+        }
+        if (totalTime < 100) {
+            console.log(`  ✅ JS execution is fast (${totalTime.toFixed(0)}ms)`);
+            console.log(`  ℹ️  If page still feels slow, the delay is BEFORE this script runs`);
+        }
+
+        console.log('\n' + '='.repeat(60));
+        console.log('END OF PERFORMANCE REPORT');
+        console.log('='.repeat(60) + '\n');
+    }
+};
+
+// Record when we started relative to page navigation
+if (performance.getEntriesByType('navigation').length > 0) {
+    const nav = performance.getEntriesByType('navigation')[0];
+    console.log(`[PERF] Page navigation started at: 0ms`);
+    console.log(`[PERF] Script started at: ${Perf.startTime.toFixed(2)}ms after navigation`);
+}
+
+Perf.mark('Script start');
+
+// =============================================================================
 // SPECIAL FOLDERS - Unified handling for apps, top sites, recent, closed, devices
 // =============================================================================
 
@@ -47,21 +173,23 @@ const SpecialFolders = {
 		switch (id) {
 			case 'top':
 				if (!chrome.topSites) return [];
-				return new Promise(resolve => {
-					chrome.topSites.get(result => {
-						resolve((result || []).slice(0, getConfigValue('number_top', 10)));
-					});
-				});
+				return Perf.trackApi('chrome.topSites.get', () =>
+					new Promise(resolve => {
+						chrome.topSites.get(r => {
+							resolve((r || []).slice(0, getConfigValue('number_top', 10)));
+						});
+					}));
 			case 'recent':
-				return new Promise(resolve => {
-					chrome.bookmarks.getRecent(getConfigValue('number_recent', 10), result => {
-						resolve(result || []);
-					});
-				});
+				return Perf.trackApi('chrome.bookmarks.getRecent', () =>
+					new Promise(resolve => {
+						chrome.bookmarks.getRecent(getConfigValue('number_recent', 10), r => {
+							resolve(r || []);
+						});
+					}));
 			case 'closed':
-				return getClosed();
+				return Perf.trackApi('chrome.sessions.getRecentlyClosed', () => getClosed());
 			case 'devices':
-				return getDevices();
+				return Perf.trackApi('chrome.sessions.getDevices', () => getDevices());
 			default:
 				return [];
 		}
@@ -76,16 +204,27 @@ const specialFolderIds = special.filter(id => SpecialFolders.isFolder(id));
 // BOOKMARK LOADING - Prefetch only visible bookmarks in parallel
 // =============================================================================
 
-// Promise wrappers for Chrome bookmark APIs
+// Promise wrappers for Chrome bookmark APIs (with performance tracking)
 const getBookmarkNodes = ids =>
 	(!ids || ids.length === 0) ? Promise.resolve([]) :
-	new Promise(resolve => chrome.bookmarks.get(ids, results => resolve(results || [])));
+	Perf.trackApi(`chrome.bookmarks.get(${ids.length} ids)`, () =>
+		new Promise(resolve => chrome.bookmarks.get(ids, results => resolve(results || []))));
 
 const getBookmarkChildren = id =>
-	new Promise(resolve => chrome.bookmarks.getChildren(id, results => resolve(results || [])));
+	Perf.trackApi(`chrome.bookmarks.getChildren(${id})`, () =>
+		new Promise(resolve => chrome.bookmarks.getChildren(id, results => resolve(results || []))));
 
+// FAST: Get only root folder IDs (Bookmarks Bar, Other Bookmarks, Mobile Bookmarks)
+// Uses getChildren("0") which is much faster than getTree()
+const getRootFolderIds = () =>
+	Perf.trackApi('chrome.bookmarks.getChildren(0) [root]', () =>
+		new Promise(resolve => chrome.bookmarks.getChildren("0", results =>
+			resolve((results || []).map(n => n.id)))));
+
+// SLOW - avoid using this! Fetches entire bookmark tree
 const getBookmarkTree = () =>
-	new Promise(resolve => chrome.bookmarks.getTree(results => resolve(results || [])));
+	Perf.trackApi('chrome.bookmarks.getTree [SLOW!]', () =>
+		new Promise(resolve => chrome.bookmarks.getTree(results => resolve(results || []))));
 
 // Cache for prefetched bookmark data
 const prefetchedData = {
@@ -131,7 +270,7 @@ async function getCachedChildren(id) {
 		return result;
 	}
 
-	// Fetch based on folder type
+	// Fetch based on folder type (cache miss)
 	if (SpecialFolders.isFolder(id)) {
 		return SpecialFolders.fetchChildren(id);
 	}
@@ -153,23 +292,15 @@ async function getCachedNode(id) {
 	return nodes;
 }
 
-// Prefetch children of a folder and recursively prefetch open subfolders
+// Prefetch ONLY the immediate children of a folder (no recursion for initial load)
 async function prefetchFolderChildren(id) {
+	// Skip if already cached
+	if (id in prefetchedData.children) return;
+
 	const children = await getBookmarkChildren(id);
 	markFolders(children);
 	prefetchedData.children[id] = children;
-
-	// Check if "remember open folders" is enabled
-	const rememberOpen = localStorage.getItem('options.remember_open');
-	if (rememberOpen === null || rememberOpen === '1' || rememberOpen === 'true') {
-		// Recursively prefetch children of open subfolders
-		const openFolderPromises = children
-			.filter(child => !child.url && localStorage.getItem(`open.${child.id}`))
-			.map(child => prefetchFolderChildren(child.id));
-		if (openFolderPromises.length > 0) {
-			await Promise.all(openFolderPromises);
-		}
-	}
+	// NOTE: No recursive prefetching - open subfolders load on-demand during render
 }
 
 // Prefetch special folder data if it's marked as open
@@ -184,8 +315,9 @@ function getConfigValue(key, defaultValue) {
 	return value !== null ? Number(value) : defaultValue;
 }
 
-// Prefetch visible bookmarks for all columns
+// Prefetch visible bookmarks for all columns (FAST - no recursion)
 async function prefetchVisibleBookmarks() {
+	Perf.mark('prefetchVisibleBookmarks start');
 	// Get all column IDs from the columns variable
 	const columnIds = columns?.flat() || [];
 
@@ -200,7 +332,7 @@ async function prefetchVisibleBookmarks() {
 
 	// Prefetch regular bookmark folders
 	if (bookmarkIds.length > 0) {
-		const bookmarkPromise = (async () => {
+		const bookmarkPromise = Perf.track(`prefetchBookmarks(${bookmarkIds.length} folders)`, async () => {
 			const nodes = await getBookmarkNodes(bookmarkIds);
 			// Cache the nodes
 			nodes.forEach(node => {
@@ -208,11 +340,12 @@ async function prefetchVisibleBookmarks() {
 			});
 			// Prefetch children for each folder (including open subfolders recursively)
 			await Promise.all(bookmarkIds.map(id => prefetchFolderChildren(id)));
-		})();
+		});
 		promises.push(bookmarkPromise);
 	}
 
 	await Promise.all(promises);
+	Perf.mark('prefetchVisibleBookmarks end');
 }
 
 // render a single bookmark node
@@ -259,11 +392,17 @@ function render(node, target) {
 
     // folder
     if (node.children) {
-        // render children if folder is open
-        if (a.open || (getConfig('remember_open') && localStorage.getItem(`open.${node.id}`))) {
+        // Store node ID for deferred loading (dataset may not exist in test env)
+        if (li.dataset) li.dataset.nodeId = node.id;
+
+        // Check if folder should be open
+        const shouldBeOpen = a.open || (getConfig('remember_open') && localStorage.getItem(`open.${node.id}`));
+        if (shouldBeOpen) {
             setClass(a, node, true);
             a.open = true;
-            getChildren(node).then(result => renderAll(result, li));
+            // ALWAYS defer subfolder rendering - even if data is cached
+            // This allows browser to paint folder headers immediately
+            if (a.dataset) a.dataset.deferred = 'true';
         }
         addFolderHandlers(node, a);
         enableDragFolder(node, a);
@@ -299,34 +438,67 @@ function renderAll(nodes, target, toplevel) {
 
 // render column with given index
 async function renderColumn(index, target) {
-    const ids = columns[index];
-    if (ids.length === 1 && !getConfig('show_root')) {
-        const result = await getChildren({ id: ids[0] });
-        renderAll(result, target);
-        addColumnHandlers(index, target);
-    } else if (ids.length > 0) {
-        const results = await Promise.all(ids.map(id => getSubTree(id)));
-        const nodes = results.flat();
-        renderAll(nodes, target, true);
-        addColumnHandlers(index, target);
-    }
+    return Perf.track(`renderColumn(${index})`, async () => {
+        const ids = columns[index];
+        if (ids.length === 1 && !getConfig('show_root')) {
+            const result = await getChildren({ id: ids[0] });
+            renderAll(result, target);
+            addColumnHandlers(index, target);
+        } else if (ids.length > 0) {
+            const results = await Promise.all(ids.map(id => getSubTree(id)));
+            const nodes = results.flat();
+            renderAll(nodes, target, true);
+            addColumnHandlers(index, target);
+        }
+    });
 }
 
 // render all columns to main div
-function renderColumns() {
+async function renderColumns() {
+    Perf.mark('renderColumns start');
     const target = document.getElementById('main');
     target.replaceChildren(); // Modern way to clear children
 
-    columns.forEach((_, i) => {
+    // Create all column containers first (fast, synchronous)
+    const columnElements = columns.map((_, i) => {
         const column = document.createElement('div');
         column.className = 'column';
         column.style.width = `${(1 / columns.length) * 100}%`;
         enableDragColumn(i, column);
         target.appendChild(column);
-        renderColumn(i, column);
+        return column;
     });
 
+    // Render all columns in parallel and wait for completion
+    await Promise.all(columnElements.map((column, i) => renderColumn(i, column)));
+
     enableDragDrop();
+    Perf.mark('renderColumns end (all columns rendered)');
+}
+
+// Expand folders that were deferred during initial render (runs after first paint)
+async function expandDeferredFolders() {
+    const deferredLinks = [...document.querySelectorAll('#main a.folder[data-deferred="true"]')];
+
+    if (deferredLinks.length === 0) return;
+
+    Perf.mark(`Expanding ${deferredLinks.length} deferred folders`);
+
+    // Expand all deferred folders in parallel
+    await Promise.all(deferredLinks.map(async (a) => {
+        const li = a.parentNode;
+        const nodeId = li?.dataset?.nodeId;
+
+        if (!nodeId || !a.open || a.nextSibling) return;
+
+        delete a.dataset.deferred;
+        const children = await getChildren({ id: nodeId, children: true });
+        if (!a.nextSibling && a.open) {
+            renderAll(children, li);
+        }
+    }));
+
+    Perf.mark('Deferred folders expanded');
 }
 
 // enables click and context menu for given folder
@@ -343,7 +515,7 @@ function addFolderHandlers(node, a) {
         items.push({ label: 'Create new column', action: () => addColumn([node.id]) });
 
         const pos = coords[node.id];
-        if (pos) {
+        if (pos && columns[pos.x]) {
             if (pos.y > 0)
                 items.push({ label: 'Move folder up', action: () => addRow(node.id, pos.x, pos.y - 1) });
             if (pos.y < columns[pos.x].length - 1)
@@ -835,6 +1007,7 @@ function verifyColumns() {
 
 // load columns from storage or default
 async function loadColumns() {
+    Perf.mark('loadColumns start');
     columns = [];
     forEachColumnEntry((x, y, id) => {
         if (!columns[x]) columns[x] = [];
@@ -844,15 +1017,29 @@ async function loadColumns() {
     if (root) {
         verifyColumns();
         await prefetchVisibleBookmarks();
-        renderColumns();
+        await renderColumns();
     } else {
-        const [treeResult] = await Promise.all([
-            getBookmarkTree(),
+        Perf.mark('loadColumns: fetching root IDs + prefetch');
+        // Use fast getRootFolderIds instead of slow getBookmarkTree
+        const [rootIds] = await Promise.all([
+            getRootFolderIds(),
             prefetchVisibleBookmarks()
         ]);
-        root = [...special, ...treeResult[0].children.map(n => n.id)];
+        root = [...special, ...rootIds];
         verifyColumns();
-        renderColumns();
+        await renderColumns();
+    }
+    Perf.mark('loadColumns end (first paint ready)');
+    Perf.summary();
+
+    // After first paint, expand any deferred folders
+    // Use requestAnimationFrame to ensure browser paints first
+    if (typeof requestAnimationFrame !== 'undefined') {
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                expandDeferredFolders();
+            });
+        });
     }
 }
 
@@ -1232,6 +1419,7 @@ function onChange(key, value) {
 
 // loads config settings
 function loadSettings() {
+    Perf.mark('loadSettings start');
     theme = themes[getConfig('theme')] || {};
     Object.keys(config).forEach(key => {
         if (key === 'background_image_file') {
@@ -1240,6 +1428,7 @@ function loadSettings() {
             onChange(key);
         }
     });
+    Perf.mark('loadSettings end');
 }
 
 // apply config values to input controls
