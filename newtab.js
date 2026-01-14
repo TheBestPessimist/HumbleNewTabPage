@@ -142,11 +142,15 @@ const Perf = {
 
         // Check pre-script delay
         if (this.startTime > 100) {
-            console.log(`  ❌ CRITICAL: ${this.startTime.toFixed(0)}ms before script even starts!`);
-            console.log(`     This is likely due to:`);
-            console.log(`     - Script files being loaded synchronously at end of <body>`);
-            console.log(`     - favicon-cache.js and newtab.js blocking each other`);
-            console.log(`     FIX: Move scripts to <head> with 'defer' attribute`);
+            console.log(`  ⚠️  ${this.startTime.toFixed(0)}ms before script starts`);
+            console.log(`     Breakdown of pre-script delay:`);
+            if (window.__earlyStylesTime) {
+                const cssLoadTime = window.__earlyStylesTime;
+                const scriptParseTime = this.startTime - window.__earlyStylesTime;
+                console.log(`     - CSS + early-styles.js load: ~${cssLoadTime.toFixed(0)}ms`);
+                console.log(`     - Deferred scripts parse: ~${scriptParseTime.toFixed(0)}ms`);
+            }
+            console.log(`     Note: Extension pages have inherent overhead (~50-150ms)`);
         }
 
         if (this.apiCalls.totalTime > 100) {
