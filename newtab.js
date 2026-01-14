@@ -1,7 +1,81 @@
 'use strict';
 
 // =============================================================================
-// OPTIMIZED BOOKMARK LOADING - Prefetch only visible bookmarks in parallel
+// SPECIAL FOLDERS - Unified handling for apps, top sites, recent, closed, devices
+// =============================================================================
+
+var SpecialFolders = {
+	// Definition of all special folders with their properties
+	defs: {
+		apps:    { title: 'Apps',             isFolder: false, url: 'chrome://apps' },
+		top:     { title: 'Most visited',     isFolder: true,  configKey: 'number_top' },
+		recent:  { title: 'Recent bookmarks', isFolder: true,  configKey: 'number_recent' },
+		closed:  { title: 'Recently closed',  isFolder: true,  configKey: 'number_closed' },
+		devices: { title: 'Other devices',    isFolder: true,  configKey: 'number_closed' }
+	},
+
+	// All special IDs (for iteration)
+	all: ['apps', 'top', 'recent', 'closed', 'devices'],
+
+	// Check if an ID is a special folder (not apps, which is a link)
+	isFolder: function(id) {
+		return this.defs[id] && this.defs[id].isFolder;
+	},
+
+	// Check if an ID is any special type
+	isSpecial: function(id) {
+		return !!this.defs[id];
+	},
+
+	// Get node definition for rendering
+	getNode: function(id) {
+		var def = this.defs[id];
+		if (!def) return null;
+		return {
+			id: id,
+			title: def.title,
+			url: def.url || undefined,
+			children: def.isFolder ? true : undefined
+		};
+	},
+
+	// Fetch children data for a special folder
+	fetchChildren: function(id) {
+		var def = this.defs[id];
+		if (!def || !def.isFolder) return Promise.resolve([]);
+
+		switch (id) {
+			case 'top':
+				if (chrome.topSites) {
+					return new Promise(function(resolve) {
+						chrome.topSites.get(function(result) {
+							resolve((result || []).slice(0, getConfigValue('number_top', 10)));
+						});
+					});
+				}
+				return Promise.resolve([]);
+			case 'recent':
+				return new Promise(function(resolve) {
+					chrome.bookmarks.getRecent(getConfigValue('number_recent', 10), function(result) {
+						resolve(result || []);
+					});
+				});
+			case 'closed':
+				return getClosed();
+			case 'devices':
+				return getDevices();
+			default:
+				return Promise.resolve([]);
+		}
+	}
+};
+
+// Convenience references for backward compatibility
+var special = SpecialFolders.all;
+var specialFolderIds = SpecialFolders.all.filter(function(id) { return SpecialFolders.isFolder(id); });
+
+// =============================================================================
+// BOOKMARK LOADING - Prefetch only visible bookmarks in parallel
 // =============================================================================
 
 // Promise wrapper helper for Chrome APIs
@@ -26,36 +100,6 @@ function getBookmarkTree() {
 	});
 }
 
-// Promise wrapper for fetching special folder data
-function fetchSpecialFolderData(id) {
-	return new Promise(function(resolve) {
-		switch (id) {
-			case 'top':
-				if (chrome.topSites) {
-					chrome.topSites.get(function(result) {
-						resolve((result || []).slice(0, getConfigValue('number_top', 10)));
-					});
-				} else {
-					resolve([]);
-				}
-				break;
-			case 'recent':
-				chrome.bookmarks.getRecent(getConfigValue('number_recent', 10), function(result) {
-					resolve(result || []);
-				});
-				break;
-			case 'closed':
-				getClosed(resolve);
-				break;
-			case 'devices':
-				getDevices(resolve);
-				break;
-			default:
-				resolve([]);
-		}
-	});
-}
-
 // Cache for prefetched bookmark data
 var prefetchedData = {
 	nodes: {},      // id -> node data
@@ -73,7 +117,7 @@ function markFolders(children) {
 }
 
 // Iterate over column storage entries, calling fn(x, y, id) for each
-// If fn returns false, stop iteration. Returns array of [x, y] pairs visited.
+// If fn returns false, stop iteration.
 function forEachColumnEntry(fn) {
 	for (var x = 0; ; x++) {
 		var foundInRow = false;
@@ -90,47 +134,40 @@ function forEachColumnEntry(fn) {
 	}
 }
 
-// Special folder IDs (apps, top, recent, closed, devices)
-// - 'apps' is a link, not a folder, so it's excluded from folder-related arrays
-var special = ['apps', 'top', 'recent', 'closed', 'devices'];
-var specialFolderIds = ['top', 'recent', 'closed', 'devices'];
-
 // Get cached children or fetch if not available (works for both regular and special folders)
-function getCachedChildren(id, callback) {
+function getCachedChildren(id) {
 	// Use cache if available
 	if (prefetchedData.children.hasOwnProperty(id)) {
-		callback(prefetchedData.children[id]);
+		var result = prefetchedData.children[id];
 		// Special folders: consume cache (delete after use) so next open fetches fresh
-		if (specialFolderIds.indexOf(id) !== -1) {
+		if (SpecialFolders.isFolder(id)) {
 			delete prefetchedData.children[id];
 		}
-		return;
+		return Promise.resolve(result);
 	}
 
 	// Fetch based on folder type
-	if (specialFolderIds.indexOf(id) !== -1) {
-		fetchSpecialFolderData(id).then(callback);
-	} else {
-		getBookmarkChildren(id).then(function(children) {
-			markFolders(children);
-			prefetchedData.children[id] = children;
-			callback(children);
-		});
+	if (SpecialFolders.isFolder(id)) {
+		return SpecialFolders.fetchChildren(id);
 	}
+	return getBookmarkChildren(id).then(function(children) {
+		markFolders(children);
+		prefetchedData.children[id] = children;
+		return children;
+	});
 }
 
 // Get cached node or fetch if not available
-function getCachedNode(id, callback) {
+function getCachedNode(id) {
 	if (prefetchedData.nodes.hasOwnProperty(id)) {
-		callback([prefetchedData.nodes[id]]);
-	} else {
-		getBookmarkNodes([id]).then(function(nodes) {
-			if (nodes && nodes[0]) {
-				prefetchedData.nodes[id] = nodes[0];
-			}
-			callback(nodes);
-		});
+		return Promise.resolve([prefetchedData.nodes[id]]);
 	}
+	return getBookmarkNodes([id]).then(function(nodes) {
+		if (nodes && nodes[0]) {
+			prefetchedData.nodes[id] = nodes[0];
+		}
+		return nodes;
+	});
 }
 
 // Prefetch children of a folder and recursively prefetch open subfolders
@@ -163,7 +200,7 @@ function prefetchSpecialFolder(id) {
 	if (!localStorage.getItem('open.' + id)) {
 		return Promise.resolve();
 	}
-	return fetchSpecialFolderData(id).then(function(result) {
+	return SpecialFolders.fetchChildren(id).then(function(result) {
 		prefetchedData.children[id] = result;
 	});
 }
@@ -339,22 +376,17 @@ function renderColumn(index, target) {
             addColumnHandlers(index, target);
         });
     else if (ids.length > 0) {
-        let i = 0;
-        const nodes = [];
-        // get all nodes for column
-        const callback = function (result) {
-            for (let j = 0; j < result.length; j++)
-                nodes.push(result[j]);
-            i++;
-            if (i < ids.length)
-                getSubTree(ids[i], callback);
-            else {
-                // render node list
-                renderAll(nodes, target, true);
-                addColumnHandlers(index, target);
+        // Fetch all nodes for column in parallel
+        Promise.all(ids.map(function(id) { return getSubTree(id); })).then(function(results) {
+            var nodes = [];
+            for (var i = 0; i < results.length; i++) {
+                for (var j = 0; j < results[i].length; j++) {
+                    nodes.push(results[i][j]);
+                }
             }
-        };
-        getSubTree(ids[i], callback);
+            renderAll(nodes, target, true);
+            addColumnHandlers(index, target);
+        });
     }
 }
 
@@ -799,7 +831,7 @@ function getChildrenFunction(node) {
             return;
         }
         // Otherwise fetch from cache (handles special folders, boolean markers, and unloaded folders)
-        getCachedChildren(node.id, function(children) {
+        getCachedChildren(node.id).then(function(children) {
             if (children) {
                 callback(children);
             } else if (coords[node.id]) {
@@ -810,42 +842,32 @@ function getChildrenFunction(node) {
     };
 }
 
-// Special folder definitions for getSubTree
-var specialFolderDefs = {
-    top: {title: 'Most visited', id: 'top', children: true},
-    apps: {title: 'Apps', id: 'apps', url: 'chrome://apps'},
-    recent: {title: 'Recent bookmarks', id: 'recent', children: true},
-    closed: {title: 'Recently closed', id: 'closed', children: true},
-    devices: {title: 'Other devices', id: 'devices', children: true}
-};
-
 // gets the subtree for given id
-function getSubTree(id, callback) {
-    if (specialFolderDefs[id]) {
-        callback([specialFolderDefs[id]]);
-        return;
+function getSubTree(id) {
+    var specialNode = SpecialFolders.getNode(id);
+    if (specialNode) {
+        return Promise.resolve([specialNode]);
     }
     // Use cached node data instead of fetching entire subtree
-    getCachedNode(id, function(nodes) {
+    return getCachedNode(id).then(function(nodes) {
         if (nodes && nodes[0]) {
             var node = nodes[0];
             node.children = prefetchedData.children.hasOwnProperty(id) ? prefetchedData.children[id] : true;
-            callback([node]);
+            return [node];
         } else if (coords[id]) {
             removeRow(coords[id].x, coords[id].y);
         }
+        return [];
     });
 }
-
-// IDs that get their own CSS class
-var specialClassIds = ['top', 'apps', 'recent', 'closed', 'devices', 'empty'];
 
 // sets css classes for node
 function setClass(target, node, isopen) {
     if (node.className) target.classList.add(node.className);
     if (node.children) target.classList.add('folder');
     target.classList.toggle('open', !!isopen);
-    if (specialClassIds.indexOf(node.id) !== -1) target.classList.add(node.id);
+    // Special folders and 'empty' get their own CSS class
+    if (SpecialFolders.isSpecial(node.id) || node.id === 'empty') target.classList.add(node.id);
 }
 
 // gets best icon for a node
@@ -1046,14 +1068,10 @@ function verifyColumns() {
 // load columns from storage or default
 function loadColumns() {
     columns = [];
-    for (let x = 0; ; x++) {
-        const row = [];
-        for (let y = 0; ; y++) {
-            const id = localStorage.getItem('column.' + x + '.' + y);
-            if (id) row.push(id); else break;
-        }
-        if (row.length > 0) columns.push(row); else break;
-    }
+    forEachColumnEntry(function(x, y, id) {
+        if (!columns[x]) columns[x] = [];
+        columns[x][y] = id;
+    });
 
     if (root) {
         verifyColumns();
@@ -1142,44 +1160,48 @@ function removeRow(xpos, ypos) {
 }
 
 // get recently closed tabs
-function getClosed(callback) {
-    const maxResults = getConfig('number_closed');
-    chrome.sessions.getRecentlyClosed({maxResults: maxResults}, function (sessions) {
-        const nodes = sessions.slice(0, maxResults).map(function(session) {
-            if (session.window && session.window.tabs.length === 1)
-                session.tab = session.window.tabs[0];
-            const sessionId = session.window ? session.window.sessionId : session.tab.sessionId;
-            return {
-                title: session.tab ? session.tab.title : session.window.tabs.length + ' Tabs',
-                url: session.tab ? session.tab.url : null,
-                className: session.window ? 'window' : null,
-                action: function () {
-                    chrome.sessions.restore(sessionId, refreshClosed);
-                    return false;
-                }
-            };
+function getClosed() {
+    return new Promise(function(resolve) {
+        var maxResults = getConfig('number_closed');
+        chrome.sessions.getRecentlyClosed({maxResults: maxResults}, function (sessions) {
+            var nodes = sessions.slice(0, maxResults).map(function(session) {
+                if (session.window && session.window.tabs.length === 1)
+                    session.tab = session.window.tabs[0];
+                var sessionId = session.window ? session.window.sessionId : session.tab.sessionId;
+                return {
+                    title: session.tab ? session.tab.title : session.window.tabs.length + ' Tabs',
+                    url: session.tab ? session.tab.url : null,
+                    className: session.window ? 'window' : null,
+                    action: function () {
+                        chrome.sessions.restore(sessionId, refreshClosed);
+                        return false;
+                    }
+                };
+            });
+            resolve(nodes);
         });
-        callback(nodes);
     });
 }
 
-function getDevices(callback) {
-    chrome.sessions.getDevices({maxResults: getConfig('number_closed')}, function (devices) {
-        const nodes = devices.map(function(device) {
-            const children = [];
-            device.sessions.forEach(function(session) {
-                var tabs = session.window ? session.window.tabs : [session.tab];
-                tabs.forEach(function(tab) {
-                    children.push({title: tab.title, url: tab.url});
+function getDevices() {
+    return new Promise(function(resolve) {
+        chrome.sessions.getDevices({maxResults: getConfig('number_closed')}, function (devices) {
+            var nodes = devices.map(function(device) {
+                var children = [];
+                device.sessions.forEach(function(session) {
+                    var tabs = session.window ? session.window.tabs : [session.tab];
+                    tabs.forEach(function(tab) {
+                        children.push({title: tab.title, url: tab.url});
+                    });
                 });
+                return {
+                    id: 'device.' + device.deviceName,
+                    title: device.deviceName,
+                    children: children
+                };
             });
-            return {
-                id: 'device.' + device.deviceName,
-                title: device.deviceName,
-                children: children
-            };
+            resolve(nodes);
         });
-        callback(nodes);
     });
 }
 
@@ -1376,66 +1398,47 @@ function setConfig(key, value) {
 // map config keys to styles
 const styles = {};
 
+// Style schema: maps config keys to CSS generation rules
+// Format: { selector, property } for simple values, or function(value) for complex ones
+var styleSchema = {
+    font:                 { sel: '#main a', prop: 'font-family', fmt: function(v) { return '"' + v + '"'; } },
+    font_size:            { sel: '#main a', prop: 'font-size', fmt: function(v) { return (v / 10) + 'em'; } },
+    font_weight:          { sel: '#main a', prop: 'font-weight' },
+    font_color:           { sel: '#main a', prop: 'color' },
+    background_color:     { sel: 'body', prop: 'background-color' },
+    background_image:     { sel: 'body', prop: 'background-image', fmt: function(v) { return 'url(' + v + ')'; } },
+    background_image_file:{ sel: 'body', prop: 'background-image', fmt: function(v) { return 'url(' + v + ')'; } },
+    background_align:     { sel: 'body', prop: 'background-position' },
+    background_repeat:    { sel: 'body', prop: 'background-repeat' },
+    background_size:      { sel: 'body', prop: 'background-size' },
+    highlight_font_color: { sel: '#main a:hover', prop: 'color' },
+    highlight_color:      { sel: '#main a:hover', prop: 'background-color' },
+    shadow_color:         function(v) { return '#main a:hover { box-shadow: 0 0 ' + scale(getConfig('shadow_blur'), 7, 100) + 'px ' + v + '; }'; },
+    shadow_blur:          function(v) { return '#main a:hover { box-shadow: 0 0 ' + scale(v, 7, 100) + 'px ' + getConfig('shadow_color') + '; }'; },
+    highlight_round:      { sel: '#main a', prop: 'border-radius', fmt: function(v) { return scale(v, .2, 1.5) + 'em'; } },
+    fade:                 { sel: '#main a', prop: 'transition-duration', fmt: function(v) { return scale(v, .2, 1) + 's'; } },
+    slide:                { sel: '.wrap', prop: 'transition-duration', fmt: function(v) { return scale(v, .2, 1) + 's'; } },
+    spacing:              function(v) { return '#main a { line-height: ' + scale(v, 2, 5.6, .8) + '; padding-left: ' + scale(v, .8, 2, .4) + 'em; padding-right: ' + scale(v, .8, 2, .4) + 'em; }'; },
+    width:                function(v) { return '#main { width: ' + (getConfig('auto_scale') ? scale(v, 80, 100, 20) + '%' : scale(v, 1000, 3000, 400) + 'px') + '; }'; },
+    h_pos:                function(v) { var margin = 100 - scale(getConfig('width'), 80, 100, 20); return '#main { left: ' + scale(v, 0, margin / 2, -margin / 2) + '%; }'; },
+    v_margin:             function(v) { return '#main { margin-top: ' + (getConfig('auto_scale') ? scale(v, 5, 20) + '%' : scale(v, 80, 600) + 'px') + '; }'; },
+    hide_options:         function() { return '#options_button { opacity: 0; }'; },
+    css:                  function(v) { return v; },
+    auto_scale:           function(v) { return v ? null : '#main { margin-top: 80px; width: 1000px; }'; }
+};
+
 function getStyle(key, value) {
-    switch (key) {
-        case 'font':
-            return '#main a { font-family: "' + value + '"; }';
-        case 'font_size':
-            return '#main a { font-size: ' + (value / 10) + 'em; }';
-        case 'font_weight':
-            return '#main a { font-weight: ' + value + '; }';
-        case 'font_color':
-            return '#main a { color: ' + value + '; }';
-        case 'background_color':
-            return 'body { background-color: ' + value + '; }';
-        case 'background_image':
-            return 'body { background-image: url(' + value + '); }';
-        case 'background_image_file':
-            return 'body { background-image: url(' + value + '); }';
-        case 'background_align':
-            return 'body { background-position: ' + value + '; }';
-        case 'background_repeat':
-            return 'body { background-repeat: ' + value + '; }';
-        case 'background_size':
-            return 'body { background-size: ' + value + '; }';
-        case 'highlight_font_color':
-            return '#main a:hover { color: ' + value + '; }';
-        case 'highlight_color':
-            return '#main a:hover { background-color: ' + value + '; }';
-        case 'shadow_color':
-            return '#main a:hover { box-shadow: 0 0 ' + scale(getConfig('shadow_blur'), 7, 100) + 'px ' + value + '; }';
-        case 'shadow_blur':
-            return '#main a:hover { box-shadow: 0 0 ' + scale(value, 7, 100) + 'px ' + getConfig('shadow_color') + '; }';
-        case 'highlight_round':
-            return '#main a { border-radius: ' + scale(value, .2, 1.5) + 'em; }';
-        case 'fade':
-            return '#main a { transition-duration: ' + scale(value, .2, 1) + 's; }';
-        case 'slide':
-            return '.wrap { transition-duration: ' + scale(value, .2, 1) + 's; }';
-        case 'spacing':
-            return '#main a { line-height: ' + scale(value, 2, 5.6, .8) + '; ' +
-                'padding-left: ' + scale(value, .8, 2, .4) + 'em; ' +
-                'padding-right: ' + scale(value, .8, 2, .4) + 'em; }';
-        case 'width':
-            return '#main { width: ' + (getConfig('auto_scale') ?
-                scale(value, 80, 100, 20) + '%' :
-                scale(value, 1000, 3000, 400) + 'px') + '; }';
-        case 'h_pos':
-            const margin = 100 - scale(getConfig('width'), 80, 100, 20);
-            return '#main { left: ' + scale(value, 0, margin / 2, -margin / 2) + '%; }';
-        case 'v_margin':
-            return '#main { margin-top: ' + (getConfig('auto_scale') ?
-                scale(value, 5, 20) + '%' :
-                scale(value, 80, 600) + 'px') + '; }';
-        case 'hide_options':
-            return '#options_button { opacity: 0; }';
-        case 'css':
-            return value;
-        case 'auto_scale':
-            return value ? null : '#main { margin-top: 80px; width: 1000px; }';
-        default:
-            return null;
+    var schema = styleSchema[key];
+    if (!schema) return null;
+
+    // Function-based schema for complex styles
+    if (typeof schema === 'function') {
+        return schema(value);
     }
+
+    // Object-based schema for simple property mappings
+    var formattedValue = schema.fmt ? schema.fmt(value) : value;
+    return schema.sel + ' { ' + schema.prop + ': ' + formattedValue + '; }';
 }
 
 // scales input value from [0,1,2] to [min,mid,max]
@@ -1755,3 +1758,23 @@ if (location.search === '?options')
 // refresh recently closed
 if (chrome.sessions)
     chrome.sessions.onChanged.addListener(refreshClosed);
+
+// Export for testing
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = {
+        getColumnIds: function() {
+            var ids = [];
+            forEachColumnEntry(function(x, y, id) { ids.push(id); });
+            return ids;
+        },
+        getCachedChildren: getCachedChildren,
+        clearPrefetchCache: function() {
+            prefetchedData.nodes = {};
+            prefetchedData.children = {};
+        },
+        getPrefetchedData: function() { return prefetchedData; },
+        prefetchSpecialFolder: prefetchSpecialFolder,
+        getConfigValue: getConfigValue,
+        special: special
+    };
+}

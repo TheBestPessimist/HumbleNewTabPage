@@ -41,6 +41,77 @@ const mockChildren = {
     '12': []
 };
 
+// Mock DOM elements
+const mockElements = {};
+function createMockElement(tag) {
+    const children = [];
+    return {
+        tagName: tag.toUpperCase(),
+        className: '',
+        style: {},
+        childNodes: children,
+        children: children,
+        firstChild: null,
+        lastChild: null,
+        nextSibling: null,
+        previousSibling: null,
+        parentNode: null,
+        appendChild: function(child) {
+            children.push(child);
+            this.firstChild = children[0];
+            this.lastChild = children[children.length - 1];
+            child.parentNode = this;
+            return child;
+        },
+        removeChild: function(child) {
+            const idx = children.indexOf(child);
+            if (idx > -1) children.splice(idx, 1);
+            this.firstChild = children[0] || null;
+            this.lastChild = children[children.length - 1] || null;
+            return child;
+        },
+        hasChildNodes: function() { return children.length > 0; },
+        classList: { add: function() {}, remove: function() {}, toggle: function() {} },
+        addEventListener: function() {},
+        querySelectorAll: function() { return []; },
+        getElementsByClassName: function() { return []; },
+        insertBefore: function(newNode, refNode) {
+            children.unshift(newNode);
+            this.firstChild = children[0];
+            return newNode;
+        },
+        getBoundingClientRect: function() { return { top: 0, left: 0, width: 100, height: 20 }; }
+    };
+}
+global.document = {
+    createElement: createMockElement,
+    getElementById: function(id) {
+        if (!mockElements[id]) {
+            mockElements[id] = createMockElement('div');
+            mockElements[id].id = id;
+        }
+        return mockElements[id];
+    },
+    head: { appendChild: function() {} },
+    body: { appendChild: function() {}, classList: { add: function() {}, remove: function() {} } },
+    addEventListener: function() {},
+    querySelectorAll: function() { return []; },
+    onclick: null,
+    onmousedown: null,
+    oncontextmenu: null,
+    onkeydown: null
+};
+
+global.window = {
+    innerWidth: 1024,
+    innerHeight: 768,
+    scrollX: 0,
+    scrollY: 0,
+    onresize: null
+};
+
+global.location = { search: '' };
+
 // Mock Chrome APIs
 global.chrome = {
     bookmarks: {
@@ -49,7 +120,30 @@ global.chrome = {
             // Return copies to avoid mutation issues
             const children = (mockChildren[id] || []).map(c => ({...c}));
             setTimeout(() => callback(children), 5);
+        },
+        get: function(ids, callback) {
+            const nodes = ids.map(id => mockBookmarks[id] ? {...mockBookmarks[id]} : null).filter(Boolean);
+            setTimeout(() => callback(nodes), 5);
+        },
+        getTree: function(callback) {
+            setTimeout(() => callback([{ children: [mockBookmarks['1'], mockBookmarks['2']] }]), 5);
+        },
+        getRecent: function(count, callback) {
+            setTimeout(() => callback([]), 5);
         }
+    },
+    tabs: {
+        getCurrent: function(callback) { setTimeout(() => callback({ id: 1 }), 5); },
+        create: function() {},
+        update: function() {}
+    },
+    sessions: {
+        getRecentlyClosed: function(opts, callback) { setTimeout(() => callback([]), 5); },
+        getDevices: function(opts, callback) { setTimeout(() => callback([]), 5); },
+        onChanged: { addListener: function() {} }
+    },
+    topSites: {
+        get: function(callback) { setTimeout(() => callback([]), 5); }
     }
 };
 
@@ -58,7 +152,7 @@ function resetState() {
     global.localStorage.clear();
     apiCalls.getChildren = [];
     // Clear require cache to get fresh module state
-    delete require.cache[require.resolve('../newtab-functions.js')];
+    delete require.cache[require.resolve('../newtab.js')];
 }
 
 // Test utilities
@@ -93,7 +187,7 @@ async function testGetColumnIds() {
     global.localStorage.setItem('column.0.1', '2');
     global.localStorage.setItem('column.1.0', 'top');
 
-    const { getColumnIds } = require('../newtab-functions.js');
+    const { getColumnIds } = require('../newtab.js');
     const columnIds = getColumnIds();
 
     assert(columnIds.length === 3, `Expected 3 column IDs, got ${columnIds.length}`);
@@ -103,57 +197,45 @@ async function testGetColumnIds() {
 }
 
 async function testGetCachedChildrenFetchesOnDemand() {
-    const { getCachedChildren, clearPrefetchCache } = require('../newtab-functions.js');
+    const { getCachedChildren, clearPrefetchCache } = require('../newtab.js');
     clearPrefetchCache();
 
-    await new Promise(resolve => {
-        getCachedChildren('1', function(children) {
-            assert(children.length === 3, `Expected 3 children, got ${children.length}`);
-            resolve();
-        });
-    });
+    const children = await getCachedChildren('1');
+    assert(children.length === 3, `Expected 3 children, got ${children.length}`);
 
     assert(apiCalls.getChildren.includes('1'), 'Should fetch children via getChildren API');
 }
 
 async function testGetCachedChildrenMarksFolders() {
-    const { getCachedChildren, clearPrefetchCache } = require('../newtab-functions.js');
+    const { getCachedChildren, clearPrefetchCache } = require('../newtab.js');
     clearPrefetchCache();
 
-    await new Promise(resolve => {
-        getCachedChildren('1', function(children) {
-            // Folder A (id 10) should be marked as folder
-            const folderA = children.find(c => c.id === '10');
-            assert(folderA.children === true, 'Folder A should have children=true');
+    const children = await getCachedChildren('1');
 
-            // Site 1 (id 11) should NOT be marked as folder
-            const site1 = children.find(c => c.id === '11');
-            assert(!site1.children, 'Site 1 should NOT have children property');
+    // Folder A (id 10) should be marked as folder
+    const folderA = children.find(c => c.id === '10');
+    assert(folderA.children === true, 'Folder A should have children=true');
 
-            // Folder B (id 12) should be marked as folder
-            const folderB = children.find(c => c.id === '12');
-            assert(folderB.children === true, 'Folder B should have children=true');
+    // Site 1 (id 11) should NOT be marked as folder
+    const site1 = children.find(c => c.id === '11');
+    assert(!site1.children, 'Site 1 should NOT have children property');
 
-            resolve();
-        });
-    });
+    // Folder B (id 12) should be marked as folder
+    const folderB = children.find(c => c.id === '12');
+    assert(folderB.children === true, 'Folder B should have children=true');
 }
 
 async function testGetCachedChildrenCachesResults() {
-    const { getCachedChildren, clearPrefetchCache, getPrefetchedData } = require('../newtab-functions.js');
+    const { getCachedChildren, clearPrefetchCache, getPrefetchedData } = require('../newtab.js');
     clearPrefetchCache();
 
     // First call - should fetch
-    await new Promise(resolve => {
-        getCachedChildren('1', resolve);
-    });
+    await getCachedChildren('1');
 
     assert(apiCalls.getChildren.length === 1, 'Should have made 1 API call');
 
     // Second call - should use cache
-    await new Promise(resolve => {
-        getCachedChildren('1', resolve);
-    });
+    await getCachedChildren('1');
 
     assert(apiCalls.getChildren.length === 1, 'Should still have only 1 API call (cached)');
 
@@ -194,7 +276,7 @@ async function testNoUndefinedFunctionCalls() {
         // Common callback/promise parameter names (these are local variables, not global functions)
         'resolve', 'reject', 'callback', 'cb', 'done', 'next', 'err', 'error',
         // Common variable names that might be called as functions
-        'url', 'action', 'handler', 'fn', 'func'
+        'url', 'action', 'handler', 'fn', 'func', 'schema'
     ];
     builtins.forEach(b => definedFunctions.add(b));
 
@@ -237,23 +319,23 @@ async function testNoUndefinedFunctionCalls() {
 }
 
 async function testPrefetchSpecialFolderWhenOpen() {
-    const { prefetchSpecialFolder, clearPrefetchCache, getPrefetchedData } = require('../newtab-functions.js');
+    const { prefetchSpecialFolder, clearPrefetchCache, getPrefetchedData } = require('../newtab.js');
     clearPrefetchCache();
 
     // Mark 'recent' folder as open
     global.localStorage.setItem('open.recent', 'true');
 
-    // Mock getRecentBookmarks function
+    // Mock Chrome API to return recent bookmarks
     const mockRecentBookmarks = [
         { id: 'r1', title: 'Recent 1', url: 'https://recent1.com' },
         { id: 'r2', title: 'Recent 2', url: 'https://recent2.com' }
     ];
-    const getRecentBookmarks = function(count) {
-        return Promise.resolve(mockRecentBookmarks);
+    global.chrome.bookmarks.getRecent = function(count, callback) {
+        setTimeout(() => callback(mockRecentBookmarks), 5);
     };
 
     // Prefetch the special folder
-    await prefetchSpecialFolder('recent', null, getRecentBookmarks, null, null);
+    await prefetchSpecialFolder('recent');
 
     const cache = getPrefetchedData();
     assert(cache.children['recent'] !== undefined, 'Should cache recent bookmarks');
@@ -261,20 +343,20 @@ async function testPrefetchSpecialFolderWhenOpen() {
 }
 
 async function testPrefetchSpecialFolderSkipsWhenClosed() {
-    const { prefetchSpecialFolder, clearPrefetchCache, getPrefetchedData } = require('../newtab-functions.js');
+    const { prefetchSpecialFolder, clearPrefetchCache, getPrefetchedData } = require('../newtab.js');
     clearPrefetchCache();
 
     // Do NOT mark 'recent' folder as open (it's closed)
     // localStorage.setItem('open.recent', 'true'); // intentionally not set
 
     let apiCalled = false;
-    const getRecentBookmarks = function(count) {
+    global.chrome.bookmarks.getRecent = function(count, callback) {
         apiCalled = true;
-        return Promise.resolve([]);
+        setTimeout(() => callback([]), 5);
     };
 
     // Prefetch the special folder
-    await prefetchSpecialFolder('recent', null, getRecentBookmarks, null, null);
+    await prefetchSpecialFolder('recent');
 
     const cache = getPrefetchedData();
     assert(cache.children['recent'] === undefined, 'Should NOT cache recent bookmarks when folder is closed');
@@ -282,24 +364,26 @@ async function testPrefetchSpecialFolderSkipsWhenClosed() {
 }
 
 async function testPrefetchTopSitesWhenOpen() {
-    const { prefetchSpecialFolder, clearPrefetchCache, getPrefetchedData } = require('../newtab-functions.js');
+    const { prefetchSpecialFolder, clearPrefetchCache, getPrefetchedData } = require('../newtab.js');
     clearPrefetchCache();
 
     // Mark 'top' folder as open
     global.localStorage.setItem('open.top', 'true');
 
-    // Mock getTopSites function
+    // Mock Chrome topSites API
     const mockTopSites = [
         { title: 'Site 1', url: 'https://site1.com' },
         { title: 'Site 2', url: 'https://site2.com' },
         { title: 'Site 3', url: 'https://site3.com' }
     ];
-    const getTopSites = function() {
-        return Promise.resolve(mockTopSites);
+    global.chrome.topSites = {
+        get: function(callback) {
+            setTimeout(() => callback(mockTopSites), 5);
+        }
     };
 
     // Prefetch the special folder
-    await prefetchSpecialFolder('top', getTopSites, null, null, null);
+    await prefetchSpecialFolder('top');
 
     const cache = getPrefetchedData();
     assert(cache.children['top'] !== undefined, 'Should cache top sites');
@@ -307,7 +391,7 @@ async function testPrefetchTopSitesWhenOpen() {
 }
 
 async function testGetCachedChildrenUsesPreloadedSpecialFolder() {
-    const { getCachedChildren, clearPrefetchCache, getPrefetchedData } = require('../newtab-functions.js');
+    const { getCachedChildren, clearPrefetchCache, getPrefetchedData } = require('../newtab.js');
     clearPrefetchCache();
 
     // Simulate prefetched data for a special folder (as if prefetchSpecialFolder ran)
@@ -327,9 +411,7 @@ async function testGetCachedChildrenUsesPreloadedSpecialFolder() {
     };
 
     // First call should use cached data, not fetch
-    const result = await new Promise(resolve => {
-        getCachedChildren('recent', resolve);
-    });
+    const result = await getCachedChildren('recent');
 
     assert(!fetchCalled, 'First call should use prefetched cache, not fetch');
     assert(result.length === 2, `Should return prefetched data (2 items), got ${result.length}`);
