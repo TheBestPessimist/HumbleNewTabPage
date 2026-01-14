@@ -4,16 +4,16 @@
 function render(node, target) {
     if (node.description === 'separator') return;
 
-    var li = document.createElement('li');
-    var a = document.createElement('a');
+    const li = document.createElement('li');
+    const a = document.createElement('a');
 
-    var url = node.url;
+    const url = node.url;
     if (url)
         a.href = url;
     else
         a.tabIndex = 0;
 
-    var text = node.title || node.name || '';
+    let text = node.title || node.name || '';
     if (!text && node.title === null) text = node.url || '';
     a.innerText = text;
 
@@ -27,7 +27,7 @@ function render(node, target) {
             return node.action(event);
         };
     } else if (url) {
-        var newtab = getConfig('newtab');
+        const newtab = getConfig('newtab');
         if (newtab === 1) {
             // new foreground tab
             a.target = '_blank';
@@ -39,7 +39,7 @@ function render(node, target) {
             };
         }
         // fix opening chrome:// and file:/// urls
-        var urlStart = url.substring(0, 6);
+        const urlStart = url.substring(0, 6);
         if (urlStart === 'chrome' || urlStart === 'file:/') {
             a.onclick = function (e) {
                 openLink(node, newtab || (e.ctrlKey ? 2 : 0));
@@ -81,9 +81,9 @@ function render(node, target) {
 
 // render an array of bookmark nodes
 function renderAll(nodes, target, toplevel) {
-    var ul = document.createElement('ul');
-    for (var i = 0; i < nodes.length; i++) {
-        var node = nodes[i];
+    const ul = document.createElement('ul');
+    for (let i = 0; i < nodes.length; i++) {
+        const node = nodes[i];
         // skip extensions and duplicated child folders
         if (toplevel || !coords[node.id])
             render(node, ul);
@@ -94,7 +94,7 @@ function renderAll(nodes, target, toplevel) {
         target.appendChild(ul);
     else {
         // wrap child ul for animation
-        var wrap = document.createElement('div');
+        const wrap = document.createElement('div');
         wrap.appendChild(ul);
         target.appendChild(wrap);
     }
@@ -104,18 +104,18 @@ function renderAll(nodes, target, toplevel) {
 
 // render column with given index
 function renderColumn(index, target) {
-    var ids = columns[index];
+    const ids = columns[index];
     if (ids.length === 1 && !getConfig('show_root'))
         getChildrenFunction({id: ids[0]})(function (result) {
             renderAll(result, target);
             addColumnHandlers(index, target);
         });
     else if (ids.length > 0) {
-        var i = 0;
-        var nodes = [];
+        let i = 0;
+        const nodes = [];
         // get all nodes for column
-        var callback = function (result) {
-            for (var j = 0; j < result.length; j++)
+        const callback = function (result) {
+            for (let j = 0; j < result.length; j++)
                 nodes.push(result[j]);
             i++;
             if (i < ids.length)
@@ -133,13 +133,13 @@ function renderColumn(index, target) {
 // render all columns to main div
 function renderColumns() {
     // clear main div
-    var target = document.getElementById('main');
+    const target = document.getElementById('main');
     while (target.hasChildNodes())
         target.removeChild(target.lastChild);
 
     // render columns
-    for (var i = 0; i < columns.length; i++) {
-        var column = document.createElement('div');
+    for (let i = 0; i < columns.length; i++) {
+        const column = document.createElement('div');
         column.className = 'column';
         column.style.width = (1 / columns.length) * 100 + '%';
 
@@ -162,7 +162,7 @@ function addFolderHandlers(node, a) {
     };
 
     // context menu handler
-    var items = getMenuItems(node);
+    const items = getMenuItems(node);
 
     // column layout items
     if (!getConfig('lock')) {
@@ -175,7 +175,7 @@ function addFolderHandlers(node, a) {
         });
 
         if (coords[node.id]) {
-            var pos = coords[node.id];
+            const pos = coords[node.id];
             if (pos.y > 0)
                 items.push({
                     label: 'Move folder up',
@@ -222,8 +222,8 @@ function addFolderHandlers(node, a) {
 
 // enables context menu for given column
 function addColumnHandlers(index, ul) {
-    var items = [];
-    var ids = columns[index];
+    let items = [];
+    const ids = columns[index];
 
     // single folder items
     if (ids.length === 1)
@@ -281,7 +281,7 @@ function addColumnHandlers(index, ul) {
 
 // gets context menu items for given node
 function getMenuItems(node) {
-    var items = [];
+    const items = [];
     items.push({
         label: 'Open all links in folder',
         action: function () {
@@ -322,12 +322,12 @@ function onMenuClick(item) {
 
 // renders a popup menu at given coordinates
 function renderMenu(items, x, y) {
-    var ul = document.createElement('ul');
+    const ul = document.createElement('ul');
     ul.className = 'menu';
-    for (var i = 0; i < items.length; i++) {
-        var li = document.createElement('li');
+    for (let i = 0; i < items.length; i++) {
+        const li = document.createElement('li');
         if (items[i]) {
-            var a = document.createElement('a');
+            const a = document.createElement('a');
             a.innerText = items[i].label;
             a.tabIndex = 0;
             a.onclick = onMenuClick(items[i]);
@@ -379,7 +379,7 @@ function closeMenu(ul) {
     document.onkeydown = null;
 }
 
-var dragIds;
+let dragIds;
 
 // enable drag and drop of column
 function enableDragColumn(id, column) {
@@ -400,7 +400,7 @@ function enableDragColumn(id, column) {
     };
 }
 
-var dropTarget;
+let dropTarget;
 
 // enable drag and drop of folder
 function enableDragFolder(node, a) {
@@ -423,7 +423,7 @@ function enableDragFolder(node, a) {
 
 // init drag and drop handlers
 function enableDragDrop() {
-    var main = document.getElementById('main');
+    const main = document.getElementById('main');
 
     if (getConfig('lock')) {
         main.ondragover = null;
@@ -436,11 +436,11 @@ function enableDragDrop() {
         event.preventDefault();
         event.dataTransfer.dropEffect = 'move';
         // highlight drop target
-        var target = getDropTarget(event);
+        const target = getDropTarget(event);
         if (target) {
             clearDropTarget();
             dropTarget = target;
-            var bordercss = 'solid 2px ' + getConfig('font_color');
+            const bordercss = 'solid 2px ' + getConfig('font_color');
             if (target.tagName === 'LI' || target.tagName === 'UL') {
                 if (isAbove(event.pageY, target)) {
                     target.style.borderBottom = bordercss;
@@ -469,13 +469,13 @@ function enableDragDrop() {
     main.ondrop = function (event) {
         event.stopPropagation();
 
-        var target = getDropTarget(event);
+        const target = getDropTarget(event);
         if (!target)
             return false;
 
         // calculate drop coordinates
-        var x = getDropX(target);
-        var y = getDropY(target, event);
+        let x = getDropX(target);
+        const y = getDropY(target, event);
 
         if (dragIds.length === 1 && y != null)
             addRow(dragIds[0], x, y);
@@ -493,7 +493,7 @@ function enableDragDrop() {
 function getDropTarget(event) {
     if (!dragIds)
         return null;
-    var target = event.target;
+    let target = event.target;
     if (target && (target.tagName === 'A' || target.parentNode.tagName === 'A') && dragIds.length === 1) {
         // get parent folder until toplevel
         while (target &&
@@ -516,7 +516,7 @@ function getDropTarget(event) {
 
 // gets x coordinate of drop target
 function getDropX(target) {
-    var x = null;
+    let x = null;
     while (target && target.className !== 'column')
         target = target.parentNode;
     if (target) {
@@ -529,7 +529,7 @@ function getDropX(target) {
 
 // gets y coordinate of drop target
 function getDropY(target, event) {
-    var y = null;
+    let y = null;
     if (target.tagName === 'LI') {
         y = 0;
         if (isAbove(event.pageY, target))
@@ -558,7 +558,7 @@ function clearDropTarget() {
     dropTarget = null;
 }
 
-var tooltipTimeout = null;
+let tooltipTimeout = null;
 
 // adds tootlips to truncated text
 function updateTooltips() {
@@ -566,9 +566,9 @@ function updateTooltips() {
 
     tooltipTimeout = setTimeout(function () {
         tooltipTimeout = null;
-        var elements = document.querySelectorAll('#main li a');
-        for (var i = 0; i < elements.length; i++) {
-            var element = elements[i];
+        const elements = document.querySelectorAll('#main li a');
+        for (let i = 0; i < elements.length; i++) {
+            const element = elements[i];
             if (element.clientWidth + 1 < element.scrollWidth) {
                 element.title = element.title || element.textContent;
             } else if (element.title === element.textContent) {
@@ -683,12 +683,12 @@ function setClass(target, node, isopen) {
 
 // gets best icon for a node
 function getIcon(node) {
-    var url = null,
+    let url = null,
         url2x = null;
     if (node.icons) {
-        var size;
-        for (var i in node.icons) {
-            var iconInfo = node.icons[i];
+        let size;
+        for (let i in node.icons) {
+            const iconInfo = node.icons[i];
             if (iconInfo.url && (!size || (iconInfo.size < size && iconInfo.size > 15))) {
                 url = iconInfo.url;
                 if (iconInfo.size > 31) url2x = iconInfo.url;
@@ -702,7 +702,7 @@ function getIcon(node) {
         url2x = `/_favicon/?pageUrl=${encodeURIComponent(node.url)}&size=32`;
     }
 
-    var icon = document.createElement(url ? 'img' : 'div');
+    const icon = document.createElement(url ? 'img' : 'div');
     icon.className = 'icon';
     icon.src = url;
     if (url2x) icon.srcset = url2x + ' 2x';
@@ -712,7 +712,7 @@ function getIcon(node) {
 
 // toggle folder open state
 function toggle(node, a) {
-    var isopen = a.open;
+    const isopen = a.open;
     setClass(a, node, !isopen);
     a.open = !isopen;
     if (isopen) {
@@ -721,9 +721,9 @@ function toggle(node, a) {
         if (a.nextSibling) {
             // auto-close child folders
             if (getConfig('auto_close')) {
-                var children = (a.nextSibling.tagName === 'DIV' ? a.nextSibling.firstChild : a.nextSibling).children;
+                const children = (a.nextSibling.tagName === 'DIV' ? a.nextSibling.firstChild : a.nextSibling).children;
                 for (var i = 0; i < children.length; i++) {
-                    var child = children[i].firstChild;
+                    const child = children[i].firstChild;
                     if (child.open)
                         child.onclick();
                 }
@@ -736,9 +736,9 @@ function toggle(node, a) {
         localStorage.setItem('open.' + node.id, true);
         // auto-close sibling folders
         if (getConfig('auto_close')) {
-            var siblings = a.parentNode.parentNode.children;
+            const siblings = a.parentNode.parentNode.children;
             for (var i = 0; i < siblings.length; i++) {
-                var sibling = siblings[i].firstChild;
+                const sibling = siblings[i].firstChild;
                 if (sibling !== a && sibling.open)
                     sibling.onclick();
             }
@@ -760,7 +760,7 @@ function toggle(node, a) {
 function animate(node, a, isopen) {
     // TODO: fix nested animations
     // wrapper needed for inner height value
-    var wrap = a.nextSibling;
+    let wrap = a.nextSibling;
     if (a.animationHandle) {
         // clear last animation
         clearTimeout(a.animationHandle);
@@ -782,7 +782,7 @@ function animate(node, a, isopen) {
         });
     });
 
-    var duration = scale(getConfig('slide'), .2, 1) * 1000;
+    const duration = scale(getConfig('slide'), .2, 1) * 1000;
     a.animationHandle = setTimeout(function () {
         a.animationHandle = null;
         if (isopen)
@@ -799,7 +799,7 @@ function animate(node, a, isopen) {
 function openLinks(node) {
     chrome.tabs.getCurrent(function () {
         getChildrenFunction(node)(function (result) {
-            for (var i = 0; i < result.length; i++)
+            for (let i = 0; i < result.length; i++)
                 openLink(result[i], 2);
         });
     });
@@ -807,7 +807,7 @@ function openLinks(node) {
 
 // opens given node
 function openLink(node, newtab) {
-    var url = node.url;
+    const url = node.url;
     if (url) {
         chrome.tabs.getCurrent(function (tab) {
             if (newtab)
@@ -821,7 +821,7 @@ function openLink(node, newtab) {
 var columns; // columns[x][y] = id
 var root; // root[] = id
 var coords; // coords[id] = {x:x, y:y}
-var special = ['apps', 'top', 'recent', 'closed', 'devices'];
+const special = ['apps', 'top', 'recent', 'closed', 'devices'];
 
 // ensure root folders are included
 function verifyColumns() {
@@ -834,7 +834,7 @@ function verifyColumns() {
     }
 
     // find missing root items
-    var missing = root.slice(0);
+    const missing = root.slice(0);
     for (var x = 0; x < columns.length; x++) {
         for (var y = 0; y < columns[x].length; y++) {
             var i = missing.indexOf(columns[x][y]);
@@ -844,7 +844,7 @@ function verifyColumns() {
     }
 
     // add missing root items
-    var column = columns[0];
+    const column = columns[0];
     for (var i = 0; i < missing.length; i++) {
         if (getConfig('show_' + missing[i]) !== false)
             column.push(missing[i]);
@@ -866,10 +866,10 @@ function verifyColumns() {
 // load columns from storage or default
 function loadColumns() {
     columns = [];
-    for (var x = 0; ; x++) {
-        var row = [];
-        for (var y = 0; ; y++) {
-            var id = localStorage.getItem('column.' + x + '.' + y);
+    for (let x = 0; ; x++) {
+        const row = [];
+        for (let y = 0; ; y++) {
+            const id = localStorage.getItem('column.' + x + '.' + y);
             if (id) row.push(id); else break;
         }
         if (row.length > 0) columns.push(row); else break;
@@ -881,10 +881,10 @@ function loadColumns() {
     } else {
         chrome.bookmarks.getTree(function (result) {
             // init root nodes
-            var nodes = result[0].children;
+            const nodes = result[0].children;
             root = special.slice(0);
 
-            for (var i = 0; i < nodes.length; i++)
+            for (let i = 0; i < nodes.length; i++)
                 root.push(nodes[i].id);
 
             verifyColumns();
@@ -898,7 +898,7 @@ function saveColumns() {
     // clear previous config
     for (var x = 0; ; x++) {
         for (var y = 0; ; y++) {
-            var id = localStorage.getItem('column.' + x + '.' + y);
+            const id = localStorage.getItem('column.' + x + '.' + y);
             if (id)
                 localStorage.removeItem('column.' + x + '.' + y);
             else
@@ -920,10 +920,10 @@ function saveColumns() {
 
 // creates and saves a new column
 function addColumn(ids, index) {
-    var column = ids.slice(0);
+    const column = ids.slice(0);
     // remove previous locations
-    for (var x = 0; x < columns.length; x++) {
-        for (var y = 0; y < columns[x].length; y++) {
+    for (let x = 0; x < columns.length; x++) {
+        for (let y = 0; y < columns[x].length; y++) {
             if (ids.indexOf(columns[x][y]) > -1) {
                 columns[x].splice(y, 1);
                 y--;
@@ -951,8 +951,8 @@ function addRow(id, xpos, ypos) {
         ypos = columns[xpos].length;
 
     // remove previous locations
-    for (var x = 0; x < columns.length; x++) {
-        var i = columns[x].indexOf(id);
+    for (let x = 0; x < columns.length; x++) {
+        const i = columns[x].indexOf(id);
         if (i > -1) {
             columns[x].splice(i, 1);
             if (x === xpos && ypos > i)
@@ -980,10 +980,10 @@ function removeRow(xpos, ypos) {
 
 // get recently closed tabs
 function getClosed(callback) {
-    var maxResults = getConfig('number_closed');
+    const maxResults = getConfig('number_closed');
     chrome.sessions.getRecentlyClosed({maxResults: maxResults}, function (sessions) {
-        var nodes = [];
-        for (var i = 0; i < sessions.length && i < maxResults; i++) {
+        const nodes = [];
+        for (let i = 0; i < sessions.length && i < maxResults; i++) {
             (function (session) {
                 if (session.window && session.window.tabs.length === 1)
                     session.tab = session.window.tabs[0];
@@ -1007,14 +1007,14 @@ function getClosed(callback) {
 
 function getDevices(callback) {
     chrome.sessions.getDevices({maxResults: getConfig('number_closed')}, function (devices) {
-        var nodes = [];
-        for (var i = 0; i < devices.length; i++) {
+        const nodes = [];
+        for (let i = 0; i < devices.length; i++) {
             (function (device) {
-                var children = [];
-                for (var j = 0; j < device.sessions.length; j++) {
-                    var session = device.sessions[j];
-                    var tabs = session.window ? session.window.tabs : [session.tab];
-                    for (var k = 0; k < tabs.length; k++) {
+                const children = [];
+                for (let j = 0; j < device.sessions.length; j++) {
+                    const session = device.sessions[j];
+                    const tabs = session.window ? session.window.tabs : [session.tab];
+                    for (let k = 0; k < tabs.length; k++) {
                         children.push({
                             title: tabs[k].title,
                             url: tabs[k].url
@@ -1034,29 +1034,29 @@ function getDevices(callback) {
 
 // refresh recently closed tab lists
 function refreshClosed() {
-    var targets = [];
-    var folders = document.getElementsByClassName('closed');
+    const targets = [];
+    const folders = document.getElementsByClassName('closed');
     for (var i = 0; i < folders.length; i++) {
-        var a = folders[i];
+        const a = folders[i];
         if (a.nextSibling) {
             a.parentNode.removeChild(a.nextSibling);
             targets.push(a.parentNode);
         }
     }
     if (folders.length === 0 && coords['closed']) {
-        var target = document.getElementsByClassName('column')[coords['closed'].x];
+        const target = document.getElementsByClassName('column')[coords['closed'].x];
         target.removeChild(target.firstChild);
         targets.push(target);
     }
 
     getChildrenFunction({id: 'closed'})(function (result) {
-        for (var i = 0; i < targets.length; i++)
+        for (let i = 0; i < targets.length; i++)
             renderAll(result, targets[i]);
     });
 }
 
 // options : default values
-var config = {
+const config = {
     font: 'Sans-serif',
     font_size: 16,
     font_weight: 400,
@@ -1098,7 +1098,7 @@ var config = {
 };
 
 // color theme values
-var themes = {
+const themes = {
     Default: {},
     Classic: {
         font_color: '#000000',
@@ -1178,11 +1178,11 @@ var themes = {
         shadow_color: '#d98764'
     }
 };
-var theme = {};
+let theme = {};
 
 // get config value or default
 function getConfig(key) {
-    var value = localStorage.getItem('options.' + key);
+    const value = localStorage.getItem('options.' + key);
     if (value != null)
         return typeof config[key] === 'number' ? Number(value) : value;
     else
@@ -1202,14 +1202,14 @@ function setConfig(key, value) {
         loadColumns();
     else if (key === 'theme') {
         theme = themes[value];
-        for (var i in config) {
+        for (let i in config) {
             if (i !== key) {
                 onChange(i);
                 showConfig(i);
             }
         }
     } else if (key.substring(0, 4) === 'show') {
-        var id = key.substring(5);
+        const id = key.substring(5);
         if (!value) {
             if (coords[id])
                 removeRow(coords[id].x, coords[id].y);
@@ -1223,7 +1223,7 @@ function setConfig(key, value) {
 }
 
 // map config keys to styles
-var styles = {};
+const styles = {};
 
 function getStyle(key, value) {
     switch (key) {
@@ -1270,7 +1270,7 @@ function getStyle(key, value) {
                 scale(value, 80, 100, 20) + '%' :
                 scale(value, 1000, 3000, 400) + 'px') + '; }';
         case 'h_pos':
-            var margin = 100 - scale(getConfig('width'), 80, 100, 20);
+            const margin = 100 - scale(getConfig('width'), 80, 100, 20);
             return '#main { left: ' + scale(value, 0, margin / 2, -margin / 2) + '%; }';
         case 'v_margin':
             return '#main { margin-top: ' + (getConfig('auto_scale') ?
@@ -1301,9 +1301,9 @@ function onChange(key, value) {
         value = getConfig(key);
 
     if (value !== config[key]) {
-        var css = getStyle(key, value);
+        const css = getStyle(key, value);
         if (css) {
-            var style;
+            let style;
             if (styles.hasOwnProperty(key))
                 style = styles[key];
             else {
@@ -1335,9 +1335,9 @@ function onChange(key, value) {
         return;
 
     // show/hide default button
-    var input = document.getElementById('options_' + key);
+    const input = document.getElementById('options_' + key);
     if (input) {
-        var isDefault = value === (theme.hasOwnProperty(key) ? theme[key] : config[key]);
+        const isDefault = value === (theme.hasOwnProperty(key) ? theme[key] : config[key]);
         input.reset.style.visibility = (isDefault ? 'hidden' : null);
         if (input.swatch)
             input.swatch.value = value;
@@ -1349,7 +1349,7 @@ function loadSettings() {
     // load theme
     theme = themes[getConfig('theme')] || {};
     // load settings
-    for (var key in config)
+    for (let key in config)
         if (key === 'background_image_file')
             setTimeout(function () {
                 onChange('background_image_file');
@@ -1360,7 +1360,7 @@ function loadSettings() {
 
 // apply config values to input controls
 function showConfig(key) {
-    var input = document.getElementById('options_' + key);
+    const input = document.getElementById('options_' + key);
     if (!input || input.type === 'file')
         return;
 
@@ -1369,14 +1369,14 @@ function showConfig(key) {
 
 // initialize config settings
 function initConfig(key) {
-    var input = document.getElementById('options_' + key);
+    const input = document.getElementById('options_' + key);
     if (!input)
         return;
 
     if (input.type === 'color') {
         input.type = 'text';
         input.className = 'color';
-        var swatch = document.createElement('input');
+        const swatch = document.createElement('input');
         swatch.type = 'color';
         swatch.value = input.value;
         swatch.oninput = function (event) {
@@ -1390,13 +1390,13 @@ function initConfig(key) {
         if (input.type === 'file') {
             // load file
             if (event.target.files.length === 1) {
-                var file = event.target.files[0];
+                const file = event.target.files[0];
                 if (file.size > 2097152) {
                     input.value = null;
                     alert('Image must be less than 2 MB.');
                     return false;
                 }
-                var reader = new FileReader();
+                const reader = new FileReader();
                 reader.onload = function (f) {
                     if (f.target.result)
                         setConfig(key, f.target.result);
@@ -1407,7 +1407,7 @@ function initConfig(key) {
             setConfig(key, input.type === 'checkbox' ? Number(input.checked) : input.value);
     };
 
-    var reset = document.createElement('a');
+    const reset = document.createElement('a');
     reset.className = 'revert';
     reset.title = 'Reset to default';
     reset.tabIndex = 0;
@@ -1435,11 +1435,11 @@ function initSettings() {
     };
 
     // options submenu navigation
-    var options = document.getElementById('options');
-    var nav = document.getElementById('options_nav');
-    var index = 0;
+    const options = document.getElementById('options');
+    const nav = document.getElementById('options_nav');
+    let index = 0;
     for (var i = 0; i < nav.children.length; i++) {
-        var a = nav.children[i].firstChild;
+        const a = nav.children[i].firstChild;
         a.onclick = function () {
             // clear current style
             nav.children[index].firstChild.classList.remove('current');
@@ -1450,19 +1450,19 @@ function initSettings() {
             options.getElementsByClassName('section')[index].classList.add('current');
             // show custom css on advanced tab
             if (index === nav.children.length - 1) {
-                var allcss = document.getElementById('all_css');
+                const allcss = document.getElementById('all_css');
                 allcss.value = '';
                 for (var key in config) {
-                    var css = (getStyle(key, getConfig(key)));
+                    const css = (getStyle(key, getConfig(key)));
                     if (css && css.length < 1000 && key !== 'css')
                         allcss.value += css + '\n';
                 }
             }
             // import/export
             if (index === nav.children.length - 2) {
-                var exports = document.getElementById('options_export');
-                var imports = document.getElementById('options_import');
-                var replacer = function (key, value) {
+                const exports = document.getElementById('options_export');
+                const imports = document.getElementById('options_import');
+                const replacer = function (key, value) {
                     if (key === 'options.background_image_file' || key === 'weather.cache') {
                         return undefined;
                     }
@@ -1473,8 +1473,8 @@ function initSettings() {
                 imports.placeholder = 'Paste exported settings here';
                 imports.onchange = function () {
                     try {
-                        var imported = JSON.parse(imports.value);
-                        for (var key in imported) {
+                        const imported = JSON.parse(imports.value);
+                        for (let key in imported) {
                             localStorage.setItem(key, imported[key]);
                         }
                         imports.value = '';
@@ -1494,20 +1494,20 @@ function initSettings() {
 
     // add options to hide bookmark folders
     chrome.bookmarks.getTree(function (result) {
-        var placeholder = document.getElementById('options_show_bookmarks');
-        var nodes = result[0].children;
+        const placeholder = document.getElementById('options_show_bookmarks');
+        const nodes = result[0].children;
         for (var i = 0; i < nodes.length; i++) {
             var key = 'show_' + nodes[i].id;
             config[key] = 1;
 
-            var span = document.createElement('span');
+            const span = document.createElement('span');
             span.innerText = nodes[i].title;
 
             var input = document.createElement('input');
             input.type = 'checkbox';
             input.id = 'options_' + key;
 
-            var label = document.createElement('label');
+            const label = document.createElement('label');
             label.appendChild(span);
             label.appendChild(input);
             placeholder.appendChild(label);
@@ -1542,14 +1542,14 @@ function initSettings() {
         // load font list
         if (chrome.fontSettings) {
             chrome.fontSettings.getFontList(function (fonts) {
-                var select = document.getElementById('options_font');
+                const select = document.getElementById('options_font');
                 if (select.childNodes.length > 0)
                     return;
 
                 fonts.unshift({fontId: 'Sans-serif'});
-                for (var i = 0; i < fonts.length; i++) {
-                    var font = fonts[i].fontId;
-                    var option = document.createElement('option');
+                for (let i = 0; i < fonts.length; i++) {
+                    const font = fonts[i].fontId;
+                    const option = document.createElement('option');
                     option.innerText = font;
                     if (font === getConfig('font'))
                         option.selected = 'selected';
@@ -1566,7 +1566,7 @@ function showOptions(show) {
     if (show) {
         if (!settingsInitialized)
             initSettings();
-        for (var key in config)
+        for (let key in config)
             showConfig(key);
     }
 }
