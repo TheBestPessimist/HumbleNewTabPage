@@ -1295,16 +1295,6 @@ function scale(value, mid, max, min) {
         min + value * (mid - min);
 }
 
-// gets rgb representation of hex color
-function hexToRgb(hex) {
-    hex = /[a-f\d]{6}/i.exec(hex);
-    var bigint = parseInt(hex, 16);
-    var r = (bigint >> 16) & 255;
-    var g = (bigint >> 8) & 255;
-    var b = bigint & 255;
-    return r + "," + g + "," + b;
-}
-
 // apply config value change
 function onChange(key, value) {
     if (value == null)
