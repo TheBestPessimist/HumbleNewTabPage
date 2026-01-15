@@ -257,53 +257,88 @@ const special = SpecialFolders.all;
 const specialFolderIds = special.filter(id => SpecialFolders.isFolder(id));
 
 // =============================================================================
-// BOOKMARK LOADING - Prefetch only visible bookmarks in parallel
+// BOOKMARK LOADING - Load from IndexedDB cache (populated by service worker)
 // =============================================================================
 
-// Promise wrappers for Chrome bookmark APIs (with performance tracking)
-// Chrome Manifest V3 APIs return promises natively when no callback is provided
-const getBookmarkNodes = ids =>
-	(!ids || ids.length === 0) ? Promise.resolve([]) :
-	Perf.trackApi(`chrome.bookmarks.get(${ids.length} ids)`, () =>
-		chrome.bookmarks.get(ids).then(r => r || []));
+// Cache loading state
+let cacheLoadError = null;
+let cacheStatus = null;
 
-const getBookmarkChildren = async (id, folderName) => {
+/**
+ * Check if the bookmark cache is available and valid
+ * @returns {Promise<{valid: boolean, lastSync: number|null, version: number|null}>}
+ */
+async function checkCacheStatus() {
+	if (cacheStatus) return cacheStatus;
+	try {
+		cacheStatus = await BookmarkCache.getCacheStatus();
+		return cacheStatus;
+	} catch (e) {
+		cacheLoadError = e;
+		return { valid: false, lastSync: null, version: null };
+	}
+}
+
+/**
+ * Get folder data from cache (replaces chrome.bookmarks.getChildren)
+ * @param {string} id - Folder ID
+ * @returns {Promise<Array>} - Array of children
+ */
+async function getFolderFromCache(id) {
 	const start = performance.now();
-	const result = await chrome.bookmarks.getChildren(id).then(r => r || []);
-	const duration = performance.now() - start;
-	const name = folderName || prefetchedData.nodes[id]?.title || `id:${id}`;
-	const apiName = `chrome.bookmarks.getChildren(${id})`;
-	Perf.apiCalls.count++;
-	Perf.apiCalls.totalTime += duration;
-	Perf.apiCalls.calls.push({ api: apiName, duration });
-	if (Perf.enabled) console.log(`[PERF:API] ${apiName}; folder: "${name}"; children: ${result.length}: ${duration.toFixed(2)}ms`);
-	return result;
-};
+	try {
+		const folder = await BookmarkCache.getFolder(id);
+		const duration = performance.now() - start;
+		const children = folder?.children || [];
+		Perf.apiCalls.count++;
+		Perf.apiCalls.totalTime += duration;
+		Perf.apiCalls.calls.push({ api: `cache.getFolder(${id})`, duration });
+		if (Perf.enabled) console.log(`[PERF:CACHE] getFolder(${id}): ${children.length} children in ${duration.toFixed(2)}ms`);
+		return children;
+	} catch (e) {
+		console.error(`[BookmarkCache] Error loading folder ${id}:`, e);
+		cacheLoadError = e;
+		return [];
+	}
+}
 
-// FAST: Get only root folder IDs (Bookmarks Bar, Other Bookmarks, Mobile Bookmarks)
-// Uses getChildren("0") which is much faster than getTree()
-const getRootFolderIds = () =>
-	Perf.trackApi('chrome.bookmarks.getChildren(0) [root]', () =>
-		chrome.bookmarks.getChildren("0").then(r => (r || []).map(n => n.id)));
+/**
+ * Get multiple folders from cache in a single operation
+ * @param {string[]} ids - Array of folder IDs
+ * @returns {Promise<Map<string, object>>}
+ */
+async function getFoldersFromCache(ids) {
+	const start = performance.now();
+	try {
+		const folders = await BookmarkCache.getFolders(ids);
+		const duration = performance.now() - start;
+		Perf.apiCalls.count++;
+		Perf.apiCalls.totalTime += duration;
+		Perf.apiCalls.calls.push({ api: `cache.getFolders(${ids.length} ids)`, duration });
+		if (Perf.enabled) console.log(`[PERF:CACHE] getFolders(${ids.length} ids): ${duration.toFixed(2)}ms`);
+		return folders;
+	} catch (e) {
+		console.error(`[BookmarkCache] Error loading folders:`, e);
+		cacheLoadError = e;
+		return new Map();
+	}
+}
 
-// SLOW - avoid using this! Fetches entire bookmark tree
-const getBookmarkTree = () =>
-	Perf.trackApi('chrome.bookmarks.getTree [SLOW!]', () =>
-		chrome.bookmarks.getTree().then(r => r || []));
+/**
+ * Get root folder IDs from cache
+ * @returns {Promise<string[]>}
+ */
+async function getRootFolderIds() {
+	const folder = await BookmarkCache.getFolder('0');
+	if (!folder?.children) return [];
+	return folder.children.filter(c => c.isFolder).map(c => c.id);
+}
 
-// Cache for prefetched bookmark data
+// Cache for prefetched bookmark data (in-memory cache for current session)
 const prefetchedData = {
 	nodes: {},      // id -> node data
 	children: {}    // id -> array of child nodes
 };
-
-// Mark folders (nodes without url) as having children
-function markFolders(children) {
-	children.forEach(child => {
-		if (!child.url) child.children = true;
-	});
-	return children;
-}
 
 // Iterate over column storage entries, calling fn(x, y, id) for each
 // If fn returns false, stop iteration.
@@ -325,7 +360,7 @@ function forEachColumnEntry(fn) {
 
 // Get cached children or fetch if not available (works for both regular and special folders)
 async function getCachedChildren(id, folderName) {
-	// Use cache if available
+	// Use in-memory cache if available
 	if (id in prefetchedData.children) {
 		const result = prefetchedData.children[id];
 		// Special folders: consume cache (delete after use) so next open fetches fresh
@@ -339,8 +374,13 @@ async function getCachedChildren(id, folderName) {
 	if (SpecialFolders.isFolder(id)) {
 		return SpecialFolders.fetchChildren(id);
 	}
-	const children = await getBookmarkChildren(id, folderName);
-	markFolders(children);
+
+	// Load from IndexedDB cache
+	const children = await getFolderFromCache(id);
+	// Mark folders (items with isFolder flag)
+	children.forEach(child => {
+		if (child.isFolder) child.children = true;
+	});
 	prefetchedData.children[id] = children;
 	return children;
 }
@@ -350,22 +390,51 @@ async function getCachedNode(id) {
 	if (id in prefetchedData.nodes) {
 		return [prefetchedData.nodes[id]];
 	}
-	const nodes = await getBookmarkNodes([id]);
-	if (nodes?.[0]) {
-		prefetchedData.nodes[id] = nodes[0];
+	// Load folder metadata from IndexedDB cache
+	const folder = await BookmarkCache.getFolder(id);
+	if (folder) {
+		const node = { id: folder.id, title: folder.title, parentId: folder.parentId };
+		prefetchedData.nodes[id] = node;
+		return [node];
 	}
-	return nodes;
+	return [];
 }
 
 // Prefetch ONLY the immediate children of a folder (no recursion for initial load)
 async function prefetchFolderChildren(id) {
-	// Skip if already cached
+	// Skip if already in memory cache
 	if (id in prefetchedData.children) return;
 
-	const children = await getBookmarkChildren(id);
-	markFolders(children);
+	const children = await getFolderFromCache(id);
+	// Mark folders (items with isFolder flag)
+	children.forEach(child => {
+		if (child.isFolder) child.children = true;
+	});
 	prefetchedData.children[id] = children;
 	// NOTE: No recursive prefetching - open subfolders load on-demand during render
+}
+
+// Batch prefetch multiple folders in a single IndexedDB transaction
+async function prefetchFolderChildrenBatch(ids) {
+	// Filter out IDs already in memory cache
+	const idsToFetch = ids.filter(id => !(id in prefetchedData.children));
+	if (idsToFetch.length === 0) return;
+
+	const folders = await getFoldersFromCache(idsToFetch);
+	for (const [id, folder] of folders) {
+		const children = folder?.children || [];
+		// Mark folders (items with isFolder flag)
+		children.forEach(child => {
+			if (child.isFolder) child.children = true;
+		});
+		prefetchedData.children[id] = children;
+	}
+	// Handle IDs that weren't found in cache (set empty array)
+	for (const id of idsToFetch) {
+		if (!(id in prefetchedData.children)) {
+			prefetchedData.children[id] = [];
+		}
+	}
 }
 
 // Prefetch special folder data if it's marked as open
@@ -380,16 +449,23 @@ function getConfigValue(key, defaultValue) {
 	return value !== null ? Number(value) : defaultValue;
 }
 
-// Prefetch ONLY folder metadata (not children) - this is fast
+// Prefetch folder metadata from IndexedDB cache
 async function prefetchFolderMetadata() {
 	Perf.mark('prefetchFolderMetadata start');
 	const columnIds = columns?.flat() || [];
 	const bookmarkIds = columnIds.filter(id => !special.includes(id));
 
 	if (bookmarkIds.length > 0) {
-		const nodes = await getBookmarkNodes(bookmarkIds);
-		nodes.forEach(node => {
-			if (node) prefetchedData.nodes[node.id] = node;
+		// Load all folder metadata from cache in one batch
+		const folders = await getFoldersFromCache(bookmarkIds);
+		folders.forEach((folder, id) => {
+			if (folder) {
+				prefetchedData.nodes[id] = {
+					id: folder.id,
+					title: folder.title,
+					parentId: folder.parentId
+				};
+			}
 		});
 	}
 	Perf.mark('prefetchFolderMetadata end');
@@ -410,13 +486,8 @@ async function loadChildrenProgressively() {
 	// Combine all IDs that need prefetching (deduplicated)
 	const allIds = [...new Set([...bookmarkIds, ...deferredFolderIds])];
 
-	// Load in small batches to avoid API congestion (Chrome API bottleneck)
-	const BATCH_SIZE = 3;
-
-	for (let i = 0; i < allIds.length; i += BATCH_SIZE) {
-		const batch = allIds.slice(i, i + BATCH_SIZE);
-		await Promise.all(batch.map(id => prefetchFolderChildren(id)));
-	}
+	// Load all folders in a single batch (one IndexedDB transaction)
+	await prefetchFolderChildrenBatch(allIds);
 
 	// Also load special folders that are open
 	await Promise.all(visibleSpecialFolders.map(id => prefetchSpecialFolder(id)));
@@ -578,6 +649,12 @@ async function expandDeferredFolders() {
     const autoExpandLinks = [...document.querySelectorAll('#main a.folder[data-auto-expand="true"]')];
     if (autoExpandLinks.length > 0) {
         Perf.mark(`Auto-expanding ${autoExpandLinks.length} folders`);
+        // Batch prefetch all auto-expand folder children first
+        const autoExpandIds = autoExpandLinks
+            .map(a => a.parentNode?.dataset?.nodeId)
+            .filter(id => id && !special.includes(id) && !specialFolderIds.includes(id));
+        await prefetchFolderChildrenBatch(autoExpandIds);
+
         await Promise.all(autoExpandLinks.map(async (a) => {
             const li = a.parentNode;
             const nodeId = li?.dataset?.nodeId;
@@ -611,12 +688,18 @@ async function expandDeferredFolders() {
     while ((deferredLinks = [...document.querySelectorAll('#main a.folder[data-deferred="true"]')]).length > 0) {
         totalDeferred += deferredLinks.length;
 
-        // Expand all deferred folders in parallel
-        await Promise.all(deferredLinks.map(async (a) => {
+        // Batch prefetch all deferred folder children first (single IndexedDB transaction)
+        const deferredIds = deferredLinks
+            .map(a => a.parentNode?.dataset?.nodeId)
+            .filter(id => id && !special.includes(id) && !specialFolderIds.includes(id));
+        await prefetchFolderChildrenBatch(deferredIds);
+
+        // Now expand all deferred folders (children are already in memory)
+        for (const a of deferredLinks) {
             const li = a.parentNode;
             const nodeId = li?.dataset?.nodeId;
 
-            if (!nodeId || !a.open || a.nextSibling) return;
+            if (!nodeId || !a.open || a.nextSibling) continue;
 
             delete a.dataset.deferred;
             const folderName = a.textContent || nodeId;
@@ -624,7 +707,7 @@ async function expandDeferredFolders() {
             if (!a.nextSibling && a.open) {
                 renderAll(children, li);
             }
-        }));
+        }
     }
 
     if (totalDeferred > 0) {
@@ -1136,9 +1219,45 @@ function verifyColumns() {
     }
 }
 
+// Show error message when cache is unavailable
+function showCacheError(error) {
+    const main = document.getElementById('main');
+    main.innerHTML = '';
+
+    const errorDiv = document.createElement('div');
+    errorDiv.className = 'cache-error';
+    errorDiv.innerHTML = `
+        <h2>⚠️ Could not load bookmarks</h2>
+        <p>The bookmark cache is not available. This usually means:</p>
+        <ul>
+            <li>The extension was just installed (wait a moment and refresh)</li>
+            <li>The service worker hasn't synced yet</li>
+            <li>There was an error syncing bookmarks</li>
+        </ul>
+        <p>Check the console for more details.</p>
+        <button onclick="location.reload()">Retry</button>
+    `;
+    main.appendChild(errorDiv);
+
+    console.error('[BookmarkCache] Cache unavailable:', error);
+    console.error('[BookmarkCache] Cache status:', cacheStatus);
+    console.error('[BookmarkCache] To debug: Open chrome://extensions, find this extension, and check the service worker logs');
+}
+
 // load columns from storage or default
 async function loadColumns() {
     Perf.mark('loadColumns start');
+
+    // Check if bookmark cache is available
+    const status = await checkCacheStatus();
+    if (!status.valid) {
+        console.error('[BookmarkCache] Cache not valid:', status);
+        showCacheError(cacheLoadError || new Error('Cache not initialized'));
+        return;
+    }
+
+    Perf.mark('loadColumns: cache valid');
+
     columns = [];
     forEachColumnEntry((x, y, id) => {
         if (!columns[x]) columns[x] = [];
@@ -1147,12 +1266,12 @@ async function loadColumns() {
 
     if (root) {
         verifyColumns();
-        // FAST: Only fetch folder metadata, not children
+        // FAST: Load folder metadata from cache
         await prefetchFolderMetadata();
         await renderColumns();
     } else {
-        Perf.mark('loadColumns: fetching root IDs + metadata');
-        // Use fast getRootFolderIds and metadata fetch (no children yet)
+        Perf.mark('loadColumns: fetching root IDs + metadata from cache');
+        // Load root folder IDs and metadata from cache
         const [rootIds] = await Promise.all([
             getRootFolderIds(),
             prefetchFolderMetadata()
@@ -1173,10 +1292,7 @@ async function loadColumns() {
             requestAnimationFrame(() => {
                 // Load children data in background, then expand folders
                 loadChildrenProgressively().then(() => {
-                    expandDeferredFolders().then(() => {
-                        // Run cache feasibility test after all deferred folders are loaded
-                        runCacheFeasibilityTest();
-                    });
+                    expandDeferredFolders();
                 });
             });
         });
@@ -1610,10 +1726,11 @@ function initSettings() {
         };
     });
 
-    // add options to hide bookmark folders
-    chrome.bookmarks.getTree().then(async result => {
+    // add options to hide bookmark folders (load from cache)
+    BookmarkCache.getFolder('0').then(async rootFolder => {
         const placeholder = document.getElementById('options_show_bookmarks');
-        result[0].children.forEach(node => {
+        const children = rootFolder?.children || [];
+        children.filter(c => c.isFolder).forEach(node => {
             const key = `show_${node.id}`;
             config[key] = 1;
 
@@ -1701,283 +1818,6 @@ if (location.search === '?options') showOptions(true);
 
 // refresh recently closed
 if (chrome.sessions) chrome.sessions.onChanged.addListener(refreshClosed);
-
-// =============================================================================
-// PERFORMANCE TEST: Measure full bookmark tree load + serialization
-// This runs after all deferred folders are loaded
-// =============================================================================
-async function runCacheFeasibilityTest() {
-    console.log('\n' + '='.repeat(60));
-    console.log('BOOKMARK CACHE FEASIBILITY TEST');
-    console.log('='.repeat(60));
-
-    // Test 1: Load entire bookmark tree
-    const treeStart = performance.now();
-    const tree = await chrome.bookmarks.getTree();
-    const treeTime = performance.now() - treeStart;
-
-    // Test 2: Flatten tree into nodes + children maps (proposed cache structure)
-    const flattenStart = performance.now();
-    const nodes = {};
-    const children = {};
-
-    function flatten(node) {
-        nodes[node.id] = {
-            id: node.id,
-            title: node.title,
-            url: node.url,
-            parentId: node.parentId
-        };
-        if (node.children) {
-            children[node.id] = node.children.map(c => c.id);
-            node.children.forEach(flatten);
-        }
-    }
-    tree.forEach(flatten);
-    const flattenTime = performance.now() - flattenStart;
-
-    // Test 3: Serialize to JSON (simulating storage write)
-    const serializeStart = performance.now();
-    const cacheData = { nodes, children, cacheVersion: 1, lastSyncTime: Date.now() };
-    const jsonString = JSON.stringify(cacheData);
-    const serializeTime = performance.now() - serializeStart;
-
-    // Test 4: Deserialize from JSON (simulating storage read)
-    const deserializeStart = performance.now();
-    const parsed = JSON.parse(jsonString);
-    const deserializeTime = performance.now() - deserializeStart;
-
-    // Test 5 & 6: Write/Read using IndexedDB
-    let storageWriteTime = -1;
-    let storageReadTime = -1;
-    let storageError = null;
-
-    // Helper to promisify IndexedDB operations
-    const openDB = () => new Promise((resolve, reject) => {
-        const request = indexedDB.open('BookmarkCacheTest', 1);
-        request.onerror = () => reject(request.error);
-        request.onsuccess = () => resolve(request.result);
-        request.onupgradeneeded = (e) => {
-            const db = e.target.result;
-            if (!db.objectStoreNames.contains('cache')) {
-                db.createObjectStore('cache');
-            }
-        };
-    });
-
-    const idbWrite = (db, data) => new Promise((resolve, reject) => {
-        const tx = db.transaction('cache', 'readwrite');
-        const store = tx.objectStore('cache');
-        const request = store.put(data, 'bookmarkCache');
-        request.onerror = () => reject(request.error);
-        request.onsuccess = () => resolve();
-    });
-
-    const idbRead = (db) => new Promise((resolve, reject) => {
-        const tx = db.transaction('cache', 'readonly');
-        const store = tx.objectStore('cache');
-        const request = store.get('bookmarkCache');
-        request.onerror = () => reject(request.error);
-        request.onsuccess = () => resolve(request.result);
-    });
-
-    try {
-        const db = await openDB();
-
-        const storageWriteStart = performance.now();
-        await idbWrite(db, cacheData);
-        storageWriteTime = performance.now() - storageWriteStart;
-
-        const storageReadStart = performance.now();
-        const readResult = await idbRead(db);
-        storageReadTime = performance.now() - storageReadStart;
-
-        db.close();
-        // Clean up test database
-        indexedDB.deleteDatabase('BookmarkCacheTest');
-    } catch (e) {
-        storageError = e.message;
-    }
-
-    // Count stats
-    const nodeCount = Object.keys(nodes).length;
-    const folderCount = Object.keys(children).length;
-    const jsonSizeKB = (jsonString.length / 1024).toFixed(1);
-
-    console.log('\n📊 RESULTS:');
-    console.log(`   Total nodes: ${nodeCount}`);
-    console.log(`   Total folders: ${folderCount}`);
-    console.log(`   Cache size: ${jsonSizeKB} KB`);
-    console.log('\n⏱️ TIMING:');
-    console.log(`   chrome.bookmarks.getTree(): ${treeTime.toFixed(2)}ms`);
-    console.log(`   Flatten tree to maps: ${flattenTime.toFixed(2)}ms`);
-    console.log(`   JSON.stringify(): ${serializeTime.toFixed(2)}ms`);
-    console.log(`   JSON.parse(): ${deserializeTime.toFixed(2)}ms`);
-    if (storageError) {
-        console.log(`   IndexedDB: ERROR - ${storageError}`);
-    } else if (storageWriteTime >= 0) {
-        console.log(`   IndexedDB write: ${storageWriteTime.toFixed(2)}ms`);
-        console.log(`   IndexedDB read: ${storageReadTime.toFixed(2)}ms`);
-    } else {
-        console.log(`   IndexedDB: NOT AVAILABLE`);
-    }
-    console.log('\n💡 INSIGHTS:');
-    const fullSyncCost = storageWriteTime >= 0
-        ? (treeTime + flattenTime + storageWriteTime).toFixed(2)
-        : (treeTime + flattenTime).toFixed(2) + ' + storage write';
-    console.log(`   Full sync cost: ${fullSyncCost}ms`);
-    const cacheReadCost = storageReadTime >= 0 ? storageReadTime.toFixed(2) : 'N/A';
-    console.log(`   Cache read cost: ${cacheReadCost}ms`);
-    console.log(`   Current API calls: ${Perf.apiCalls.totalTime.toFixed(2)}ms`);
-    console.log(`   Potential speedup: ${(Perf.apiCalls.totalTime / storageReadTime).toFixed(1)}x faster`);
-    console.log('\n' + '='.repeat(60));
-    console.log('END BOOKMARK CACHE FEASIBILITY TEST');
-    console.log('='.repeat(60) + '\n');
-
-    // ==========================================================================
-    // TEST 2: Per-folder storage (realistic simulation)
-    // ==========================================================================
-    console.log('\n' + '='.repeat(60));
-    console.log('PER-FOLDER CACHE TEST (Realistic Simulation)');
-    console.log('='.repeat(60));
-
-    // Build per-folder cache structure (what background.js would create)
-    const folders = {};
-    function buildFolderCache(node, parentId) {
-        if (node.children) {
-            folders[node.id] = {
-                id: node.id,
-                title: node.title,
-                parentId: parentId,
-                children: node.children.map(c => ({
-                    id: c.id,
-                    title: c.title,
-                    url: c.url
-                }))
-            };
-            node.children.forEach(c => buildFolderCache(c, node.id));
-        }
-    }
-    tree.forEach(n => buildFolderCache(n, null));
-
-    // Calculate per-folder sizes
-    let totalFolderSize = 0;
-    const folderSizes = {};
-    for (const id in folders) {
-        const size = JSON.stringify(folders[id]).length;
-        folderSizes[id] = size;
-        totalFolderSize += size;
-    }
-
-    console.log(`\n📊 PER-FOLDER CACHE STATS:`);
-    console.log(`   Total folders: ${Object.keys(folders).length}`);
-    console.log(`   Total size: ${(totalFolderSize / 1024).toFixed(1)} KB`);
-    console.log(`   Avg folder size: ${(totalFolderSize / Object.keys(folders).length).toFixed(0)} bytes`);
-
-    // Get the actual folder IDs currently displayed in columns
-    const displayedFolderIds = columns.flat().filter(id => !special.includes(id));
-
-    // Also get open subfolder IDs (folders that are expanded)
-    const openFolderIds = [];
-    for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (key?.startsWith('open.')) {
-            const id = key.substring(5);
-            if (!special.includes(id) && folders[id]) {
-                openFolderIds.push(id);
-            }
-        }
-    }
-
-    const allNeededIds = [...new Set([...displayedFolderIds, ...openFolderIds])];
-    const neededSize = allNeededIds.reduce((sum, id) => sum + (folderSizes[id] || 0), 0);
-
-    console.log(`\n📍 YOUR CURRENT LAYOUT:`);
-    console.log(`   Column folders: ${displayedFolderIds.length} (${displayedFolderIds.join(', ')})`);
-    console.log(`   Open subfolders: ${openFolderIds.length}`);
-    console.log(`   Total folders to load: ${allNeededIds.length}`);
-    console.log(`   Data size needed: ${(neededSize / 1024).toFixed(1)} KB`);
-
-    // Write per-folder cache to IndexedDB
-    const openDB2 = () => new Promise((resolve, reject) => {
-        const request = indexedDB.open('BookmarkCacheTest2', 1);
-        request.onerror = () => reject(request.error);
-        request.onsuccess = () => resolve(request.result);
-        request.onupgradeneeded = (e) => {
-            const db = e.target.result;
-            if (!db.objectStoreNames.contains('folders')) {
-                db.createObjectStore('folders');
-            }
-        };
-    });
-
-    try {
-        const db2 = await openDB2();
-
-        // Write all folders individually
-        const writeAllStart = performance.now();
-        const writeTx = db2.transaction('folders', 'readwrite');
-        const writeStore = writeTx.objectStore('folders');
-        for (const id in folders) {
-            writeStore.put(folders[id], `folder:${id}`);
-        }
-        await new Promise((resolve, reject) => {
-            writeTx.oncomplete = resolve;
-            writeTx.onerror = () => reject(writeTx.error);
-        });
-        const writeAllTime = performance.now() - writeAllStart;
-
-        // Read ONLY the folders needed for current layout (realistic scenario)
-        const readNeededStart = performance.now();
-        const readTx = db2.transaction('folders', 'readonly');
-        const readStore = readTx.objectStore('folders');
-        const readPromises = allNeededIds.map(id => new Promise((resolve, reject) => {
-            const req = readStore.get(`folder:${id}`);
-            req.onsuccess = () => resolve(req.result);
-            req.onerror = () => reject(req.error);
-        }));
-        const neededFolders = await Promise.all(readPromises);
-        const readNeededTime = performance.now() - readNeededStart;
-
-        // Also test reading ALL folders (worst case)
-        const readAllStart = performance.now();
-        const readAllTx = db2.transaction('folders', 'readonly');
-        const readAllStore = readAllTx.objectStore('folders');
-        const allKeys = Object.keys(folders).map(id => `folder:${id}`);
-        const readAllPromises = allKeys.map(key => new Promise((resolve, reject) => {
-            const req = readAllStore.get(key);
-            req.onsuccess = () => resolve(req.result);
-            req.onerror = () => reject(req.error);
-        }));
-        const allFolders = await Promise.all(readAllPromises);
-        const readAllTime = performance.now() - readAllStart;
-
-        db2.close();
-        indexedDB.deleteDatabase('BookmarkCacheTest2');
-
-        console.log(`\n⏱️ PER-FOLDER TIMING:`);
-        console.log(`   Write all ${Object.keys(folders).length} folders: ${writeAllTime.toFixed(2)}ms`);
-        console.log(`   Read ${allNeededIds.length} needed folders: ${readNeededTime.toFixed(2)}ms`);
-        console.log(`   Read ALL ${Object.keys(folders).length} folders: ${readAllTime.toFixed(2)}ms`);
-
-        console.log(`\n💡 PER-FOLDER INSIGHTS:`);
-        console.log(`   Target: <100ms for page load`);
-        console.log(`   Realistic read time: ${readNeededTime.toFixed(2)}ms`);
-        if (readNeededTime < 100) {
-            console.log(`   ✅ ACHIEVABLE! ${readNeededTime.toFixed(2)}ms < 100ms target`);
-        } else {
-            console.log(`   ⚠️  Still too slow. Need further optimization.`);
-        }
-        console.log(`   Speedup vs current: ${(Perf.apiCalls.totalTime / readNeededTime).toFixed(0)}x faster`);
-
-    } catch (e) {
-        console.log(`   IndexedDB error: ${e.message}`);
-    }
-
-    console.log('\n' + '='.repeat(60));
-    console.log('END PER-FOLDER CACHE TEST');
-    console.log('='.repeat(60) + '\n');
-}
 
 // Export for testing
 if (typeof module !== 'undefined' && module.exports) {

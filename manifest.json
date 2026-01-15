@@ -16,11 +16,15 @@
 		"topSites",
 		"tabs",
 		"fontSettings",
-		"sessions"
+		"sessions",
+		"alarms"
 	],
 	"optional_host_permissions": [
 		"file:///"
 	],
+	"background": {
+		"service_worker": "background.js"
+	},
 	"chrome_url_overrides": {
 		"newtab": "newtab.html"
 	},
