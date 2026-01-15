@@ -10,8 +10,8 @@ const Perf = {
     marks: [],
     operations: [], // Detailed operation log
     enabled: true,
-    apiCalls: { count: 0, totalTime: 0, calls: [] },
-    cacheCalls: { count: 0, totalTime: 0, calls: [] },
+    apiCalls: {count: 0, totalTime: 0, calls: []},
+    cacheCalls: {count: 0, totalTime: 0, calls: []},
     firstPaintTime: null,
     reportPrinted: false,
 
@@ -19,9 +19,12 @@ const Perf = {
         if (!this.enabled) return;
         const now = performance.now();
         const elapsed = now - this.startTime;
-        this.marks.push({ label, time: now, elapsed });
+        this.marks.push({label, time: now, elapsed});
         // Use Performance API for DevTools integration
-        try { performance.mark(`perf-${label.replace(/\s+/g, '-')}`); } catch(e) {}
+        try {
+            performance.mark(`perf-${label.replace(/\s+/g, '-')}`);
+        } catch (e) {
+        }
         console.log(`[PERF] ${elapsed.toFixed(2)}ms - ${label}`);
     },
 
@@ -33,7 +36,7 @@ const Perf = {
         const duration = performance.now() - start;
         this.apiCalls.count++;
         this.apiCalls.totalTime += duration;
-        this.apiCalls.calls.push({ api: apiName, duration });
+        this.apiCalls.calls.push({api: apiName, duration});
         console.log(`[PERF:API] ${apiName}: ${duration.toFixed(2)}ms`);
         return result;
     },
@@ -44,7 +47,7 @@ const Perf = {
         const start = performance.now();
         const result = await fn();
         const duration = performance.now() - start;
-        this.operations.push({ label, duration, timestamp: start - this.startTime });
+        this.operations.push({label, duration, timestamp: start - this.startTime});
         return result;
     },
 
@@ -120,7 +123,7 @@ const Perf = {
         });
 
         // Slow operations (>5ms)
-        const slowOps = this.operations.filter(o => o.duration > 5).sort((a,b) => b.duration - a.duration);
+        const slowOps = this.operations.filter(o => o.duration > 5).sort((a, b) => b.duration - a.duration);
         if (slowOps.length > 0) {
             console.log('\n🐌 SLOW OPERATIONS (>5ms):');
             slowOps.forEach(o => {
@@ -131,7 +134,7 @@ const Perf = {
         // IndexedDB cache breakdown
         if (this.cacheCalls.calls.length > 0) {
             console.log('\n💾 INDEXEDDB CACHE CALLS:');
-            const sorted = [...this.cacheCalls.calls].sort((a,b) => b.duration - a.duration);
+            const sorted = [...this.cacheCalls.calls].sort((a, b) => b.duration - a.duration);
             sorted.forEach(c => {
                 const bar = '█'.repeat(Math.min(Math.ceil(c.duration / 10), 50));
                 console.log(`  ${c.duration.toFixed(1).padStart(7)}ms | ${bar} | ${c.api}`);
@@ -141,7 +144,7 @@ const Perf = {
         // Chrome API breakdown
         if (this.apiCalls.calls.length > 0) {
             console.log('\n🔌 CHROME API CALLS (special folders only, after first paint):');
-            const sorted = [...this.apiCalls.calls].sort((a,b) => b.duration - a.duration);
+            const sorted = [...this.apiCalls.calls].sort((a, b) => b.duration - a.duration);
             sorted.forEach(c => {
                 const bar = '█'.repeat(Math.min(Math.ceil(c.duration / 10), 50));
                 console.log(`  ${c.duration.toFixed(1).padStart(7)}ms | ${bar} | ${c.api}`);
@@ -207,104 +210,108 @@ Perf.mark('Script start');
 // =============================================================================
 
 const SpecialFolders = {
-	// Definition of all special folders with their properties
-	defs: {
-		top:     { title: 'Most visited',     isFolder: true,  configKey: 'number_top' },
-		recent:  { title: 'Recent bookmarks', isFolder: true,  configKey: 'number_recent' },
-		closed:  { title: 'Recently closed',  isFolder: true,  configKey: 'number_closed' },
-		devices: { title: 'Other devices',    isFolder: true,  configKey: 'number_closed' }
-	},
+    // Definition of all special folders with their properties
+    defs: {
+        top: {title: 'Most visited', isFolder: true, configKey: 'number_top'},
+        recent: {title: 'Recent bookmarks', isFolder: true, configKey: 'number_recent'},
+        closed: {title: 'Recently closed', isFolder: true, configKey: 'number_closed'},
+        devices: {title: 'Other devices', isFolder: true, configKey: 'number_closed'}
+    },
 
-	// All special IDs (for iteration)
-	all: ['top', 'recent', 'closed', 'devices'],
+    // All special IDs (for iteration)
+    all: ['top', 'recent', 'closed', 'devices'],
 
-	// Check if an ID is a special folder
-	isFolder(id) {
-		return this.defs[id]?.isFolder;
-	},
+    // Check if an ID is a special folder
+    isFolder(id) {
+        return this.defs[id]?.isFolder;
+    },
 
-	// Check if an ID is any special type
-	isSpecial(id) {
-		return !!this.defs[id];
-	},
+    // Check if an ID is any special type
+    isSpecial(id) {
+        return !!this.defs[id];
+    },
 
-	// Get node definition for rendering
-	getNode(id) {
-		const def = this.defs[id];
-		if (!def) return null;
-		return {
-			id,
-			title: def.title,
-			url: def.url,
-			children: def.isFolder ? true : undefined
-		};
-	},
+    // Get node definition for rendering
+    getNode(id) {
+        const def = this.defs[id];
+        if (!def) return null;
+        return {
+            id,
+            title: def.title,
+            url: def.url,
+            children: def.isFolder ? true : undefined
+        };
+    },
 
-	// Fetch children data for a special folder
-	// ONLY reads from IndexedDB cache - no Chrome API fallback
-	// Exception: 'top' sites must be fetched here (SW can't access chrome.topSites)
-	async fetchChildren(id) {
-		const def = this.defs[id];
-		if (!def?.isFolder) return [];
-		const limit = getConfigValue(def.configKey, 10);
+    // Fetch children data for a special folder
+    // ONLY reads from IndexedDB cache - no Chrome API fallback
+    // Exception: 'top' sites must be fetched here (SW can't access chrome.topSites)
+    async fetchChildren(id) {
+        const def = this.defs[id];
+        if (!def?.isFolder) return [];
+        const limit = getConfigValue(def.configKey, 10);
 
-		// 'top' is special - SW can't cache it, so we fetch and cache here
-		if (id === 'top') {
-			return this._fetchTopSites(limit);
-		}
+        // 'top' is special - SW can't cache it, so we fetch and cache here
+        if (id === 'top') {
+            return this._fetchTopSites(limit);
+        }
 
-		// All other special folders: read from cache only, no API fallback
-		const cached = await BookmarkCache.getSpecialFolder(id);
-		if (cached?.data) {
-			const status = cached.fresh ? 'fresh' : 'stale';
-			console.log(`[SpecialFolders] CACHE ${status}: ${id} (${cached.data.length} items)`);
-			Perf.cacheCalls.count++;
-			Perf.cacheCalls.calls.push({ api: `cache.special:${id}`, duration: 0 });
-			return this._hydrateData(id, cached.data.slice(0, limit));
-		}
+        // All other special folders: read from cache only, no API fallback
+        const cached = await BookmarkCache.getSpecialFolder(id);
+        if (cached?.data) {
+            const status = cached.fresh ? 'fresh' : 'stale';
+            console.log(`[SpecialFolders] CACHE ${status}: ${id} (${cached.data.length} items)`);
+            Perf.cacheCalls.count++;
+            Perf.cacheCalls.calls.push({api: `cache.special:${id}`, duration: 0});
+            return this._hydrateData(id, cached.data.slice(0, limit));
+        }
 
-		// Cache miss - return empty, don't call Chrome APIs
-		return [];
-	},
+        // Cache miss - return empty, don't call Chrome APIs
+        return [];
+    },
 
-	// Fetch top sites (only special folder that newtab.js fetches directly)
-	async _fetchTopSites(limit) {
-		// Try cache first
-		const cached = await BookmarkCache.getSpecialFolder('top');
-		if (cached?.fresh) {
-			console.log(`[SpecialFolders] CACHE HIT: top (${cached.data.length} items)`);
-			Perf.cacheCalls.count++;
-			Perf.cacheCalls.calls.push({ api: `cache.special:top`, duration: 0 });
-			return cached.data.slice(0, limit);
-		}
+    // Fetch top sites (only special folder that newtab.js fetches directly)
+    async _fetchTopSites(limit) {
+        // Try cache first
+        const cached = await BookmarkCache.getSpecialFolder('top');
+        if (cached?.fresh) {
+            console.log(`[SpecialFolders] CACHE HIT: top (${cached.data.length} items)`);
+            Perf.cacheCalls.count++;
+            Perf.cacheCalls.calls.push({api: `cache.special:top`, duration: 0});
+            return cached.data.slice(0, limit);
+        }
 
-		// Cache miss or stale - fetch from API (only for 'top')
-		if (!chrome.topSites) return [];
-		const reason = cached ? 'stale' : 'missing';
-		console.log(`[SpecialFolders] CACHE ${reason}: top - fetching from chrome.topSites`);
+        // Cache miss or stale - fetch from API (only for 'top')
+        if (!chrome.topSites) return [];
+        const reason = cached ? 'stale' : 'missing';
+        console.log(`[SpecialFolders] CACHE ${reason}: top - fetching from chrome.topSites`);
 
-		const freshData = await Perf.trackApi('chrome.topSites.get', () =>
-			chrome.topSites.get().then(r => r || []));
+        const freshData = await Perf.trackApi('chrome.topSites.get', () =>
+            chrome.topSites.get().then(r => r || []));
 
-		// Cache for next time
-		BookmarkCache.setSpecialFolder('top', freshData).catch(e =>
-			console.warn(`[SpecialFolders] Failed to cache top:`, e));
+        // Cache for next time
+        BookmarkCache.setSpecialFolder('top', freshData).catch(e =>
+            console.warn(`[SpecialFolders] Failed to cache top:`, e));
 
-		return freshData.slice(0, limit);
-	},
+        return freshData.slice(0, limit);
+    },
 
-	// Hydrate cached data with runtime properties (action callbacks, className)
-	_hydrateData(id, data) {
-		if (id === 'closed') {
-			return data.map(item => ({
-				...item,
-				className: item.isWindow ? 'window' : null,
-				action: () => { chrome.sessions.restore(item.sessionId); refreshClosed(); return false; }
-			}));
-		}
-		// 'top', 'recent', 'devices' don't need hydration
-		return data;
-	}
+    // Hydrate cached data with runtime properties (action callbacks, className)
+    _hydrateData(id, data) {
+        if (id === 'closed') {
+            return data.map(item => ({
+                ...item,
+                className: item.isWindow ? 'window' : null,
+                action: () => {
+                    chrome.sessions.restore(item.sessionId);
+                    refreshClosed();
+                    return false;
+                }
+            }));
+        }
+        // 'top', 'recent', 'devices' don't need hydration
+        return data;
+    }
 };
 
 // Convenience references
@@ -324,14 +331,14 @@ let cacheStatus = null;
  * @returns {Promise<{valid: boolean, lastSync: number|null, version: number|null}>}
  */
 async function checkCacheStatus() {
-	if (cacheStatus) return cacheStatus;
-	try {
-		cacheStatus = await BookmarkCache.getCacheStatus();
-		return cacheStatus;
-	} catch (e) {
-		cacheLoadError = e;
-		return { valid: false, lastSync: null, version: null };
-	}
+    if (cacheStatus) return cacheStatus;
+    try {
+        cacheStatus = await BookmarkCache.getCacheStatus();
+        return cacheStatus;
+    } catch (e) {
+        cacheLoadError = e;
+        return {valid: false, lastSync: null, version: null};
+    }
 }
 
 /**
@@ -340,20 +347,20 @@ async function checkCacheStatus() {
  * @returns {Promise<Array>} - Array of children
  */
 async function getFolderFromCache(id) {
-	const start = performance.now();
-	try {
-		const folder = await BookmarkCache.getFolder(id);
-		const duration = performance.now() - start;
-		const children = folder?.children || [];
-		Perf.cacheCalls.count++;
-		Perf.cacheCalls.totalTime += duration;
-		Perf.cacheCalls.calls.push({ api: `cache.getFolder(${id})`, duration });
-		return children;
-	} catch (e) {
-		console.error(`[BookmarkCache] Error loading folder ${id}:`, e);
-		cacheLoadError = e;
-		return [];
-	}
+    const start = performance.now();
+    try {
+        const folder = await BookmarkCache.getFolder(id);
+        const duration = performance.now() - start;
+        const children = folder?.children || [];
+        Perf.cacheCalls.count++;
+        Perf.cacheCalls.totalTime += duration;
+        Perf.cacheCalls.calls.push({api: `cache.getFolder(${id})`, duration});
+        return children;
+    } catch (e) {
+        console.error(`[BookmarkCache] Error loading folder ${id}:`, e);
+        cacheLoadError = e;
+        return [];
+    }
 }
 
 /**
@@ -362,19 +369,19 @@ async function getFolderFromCache(id) {
  * @returns {Promise<Map<string, object>>}
  */
 async function getFoldersFromCache(ids) {
-	const start = performance.now();
-	try {
-		const folders = await BookmarkCache.getFolders(ids);
-		const duration = performance.now() - start;
-		Perf.cacheCalls.count++;
-		Perf.cacheCalls.totalTime += duration;
-		Perf.cacheCalls.calls.push({ api: `cache.getFolders(${ids.length} ids)`, duration });
-		return folders;
-	} catch (e) {
-		console.error(`[BookmarkCache] Error loading folders:`, e);
-		cacheLoadError = e;
-		return new Map();
-	}
+    const start = performance.now();
+    try {
+        const folders = await BookmarkCache.getFolders(ids);
+        const duration = performance.now() - start;
+        Perf.cacheCalls.count++;
+        Perf.cacheCalls.totalTime += duration;
+        Perf.cacheCalls.calls.push({api: `cache.getFolders(${ids.length} ids)`, duration});
+        return folders;
+    } catch (e) {
+        console.error(`[BookmarkCache] Error loading folders:`, e);
+        cacheLoadError = e;
+        return new Map();
+    }
 }
 
 /**
@@ -382,59 +389,59 @@ async function getFoldersFromCache(ids) {
  * @returns {Promise<string[]>}
  */
 async function getRootFolderIds() {
-	const folder = await BookmarkCache.getFolder('0');
-	if (!folder?.children) return [];
-	return folder.children.filter(c => c.isFolder).map(c => c.id);
+    const folder = await BookmarkCache.getFolder('0');
+    if (!folder?.children) return [];
+    return folder.children.filter(c => c.isFolder).map(c => c.id);
 }
 
 // Iterate over column storage entries, calling fn(x, y, id) for each
 // If fn returns false, stop iteration.
 function forEachColumnEntry(fn) {
-	for (let x = 0; ; x++) {
-		let foundInRow = false;
-		for (let y = 0; ; y++) {
-			const id = localStorage.getItem(`column.${x}.${y}`);
-			if (id) {
-				foundInRow = true;
-				if (fn?.(x, y, id) === false) return;
-			} else {
-				break;
-			}
-		}
-		if (!foundInRow) break;
-	}
+    for (let x = 0; ; x++) {
+        let foundInRow = false;
+        for (let y = 0; ; y++) {
+            const id = localStorage.getItem(`column.${x}.${y}`);
+            if (id) {
+                foundInRow = true;
+                if (fn?.(x, y, id) === false) return;
+            } else {
+                break;
+            }
+        }
+        if (!foundInRow) break;
+    }
 }
 
 // Get children for a folder (works for both regular and special folders)
 // Uses BookmarkCache's in-memory cache for regular bookmarks (fast after loadAllData)
 async function getChildren_internal(id) {
-	// Special folders use Chrome APIs (fetched fresh each time)
-	if (SpecialFolders.isFolder(id)) {
-		return SpecialFolders.fetchChildren(id);
-	}
+    // Special folders use Chrome APIs (fetched fresh each time)
+    if (SpecialFolders.isFolder(id)) {
+        return SpecialFolders.fetchChildren(id);
+    }
 
-	// Regular bookmarks: load from BookmarkCache (uses in-memory cache)
-	const children = await getFolderFromCache(id);
-	// Mark folders (items with isFolder flag)
-	children.forEach(child => {
-		if (child.isFolder) child.children = true;
-	});
-	return children;
+    // Regular bookmarks: load from BookmarkCache (uses in-memory cache)
+    const children = await getFolderFromCache(id);
+    // Mark folders (items with isFolder flag)
+    children.forEach(child => {
+        if (child.isFolder) child.children = true;
+    });
+    return children;
 }
 
 // Get node metadata (uses BookmarkCache's in-memory cache)
 async function getNode_internal(id) {
-	const folder = await BookmarkCache.getFolder(id);
-	if (folder) {
-		return { id: folder.id, title: folder.title, parentId: folder.parentId };
-	}
-	return null;
+    const folder = await BookmarkCache.getFolder(id);
+    if (folder) {
+        return {id: folder.id, title: folder.title, parentId: folder.parentId};
+    }
+    return null;
 }
 
 // Helper to get config value (works before full config is loaded)
 function getConfigValue(key, defaultValue) {
-	const value = localStorage.getItem(`options.${key}`);
-	return value !== null ? Number(value) : defaultValue;
+    const value = localStorage.getItem(`options.${key}`);
+    return value !== null ? Number(value) : defaultValue;
 }
 
 // render a single bookmark node
@@ -443,7 +450,7 @@ function render(node, target) {
 
     const li = document.createElement('li');
     const a = document.createElement('a');
-    const { url } = node;
+    const {url} = node;
 
     if (url) {
         a.href = url;
@@ -466,12 +473,23 @@ function render(node, target) {
         if (newtab === 1) {
             a.target = '_blank';
         } else if (newtab === 2) {
-            a.onclick = () => { openLink(node, newtab); return false; };
+            a.onclick = () => {
+                openLink(node, newtab);
+                return false;
+            };
         }
         // Handle chrome:// and file:/// urls that need special opening
         if (url.startsWith('chrome') || url.startsWith('file:/')) {
-            a.onclick = e => { openLink(node, newtab || (e.ctrlKey ? 2 : 0)); return false; };
-            a.onauxclick = e => { if (e.button === 1) { openLink(node, 2); return false; } };
+            a.onclick = e => {
+                openLink(node, newtab || (e.ctrlKey ? 2 : 0));
+                return false;
+            };
+            a.onauxclick = e => {
+                if (e.button === 1) {
+                    openLink(node, 2);
+                    return false;
+                }
+            };
         }
     } else if (!node.children) {
         a.style.pointerEvents = 'none';
@@ -529,7 +547,7 @@ function renderAll(nodes, target, toplevel) {
         if (toplevel || !coords[node.id]) render(node, ul);
     });
     if (ul.childNodes.length === 0) {
-        render({ id: 'empty', title: '< Empty >' }, ul);
+        render({id: 'empty', title: '< Empty >'}, ul);
     }
     if (toplevel) {
         fragment.appendChild(ul);
@@ -551,7 +569,7 @@ async function renderColumn(index, target) {
         const ids = columns[index];
         if (ids.length === 1 && !getConfig('show_root')) {
             // Single folder with show_root=false: render children directly
-            const result = await getChildren({ id: ids[0] });
+            const result = await getChildren({id: ids[0]});
             renderAll(result, target);
             addColumnHandlers(index, target);
         } else if (ids.length > 0) {
@@ -601,7 +619,7 @@ async function expandDeferredFolders() {
 
         delete a.dataset.deferred;
         const folderName = a.textContent || nodeId;
-        const children = await getChildren({ id: nodeId, children: true }, folderName);
+        const children = await getChildren({id: nodeId, children: true}, folderName);
         if (a.open && !a.nextSibling) {
             renderAll(children, li);
         }
@@ -614,7 +632,10 @@ async function expandDeferredFolders() {
 // enables click and context menu for given folder
 function addFolderHandlers(node, a) {
     // click handler
-    a.onclick = () => { toggle(node, a); return false; };
+    a.onclick = () => {
+        toggle(node, a);
+        return false;
+    };
 
     // context menu handler
     const items = getMenuItems(node);
@@ -622,44 +643,47 @@ function addFolderHandlers(node, a) {
     // column layout items
     if (!getConfig('lock')) {
         items.push(null); // spacer
-        items.push({ label: 'Create new column', action: () => addColumn([node.id]) });
+        items.push({label: 'Create new column', action: () => addColumn([node.id])});
 
         const pos = coords[node.id];
         if (pos && columns[pos.x]) {
             if (pos.y > 0)
-                items.push({ label: 'Move folder up', action: () => addRow(node.id, pos.x, pos.y - 1) });
+                items.push({label: 'Move folder up', action: () => addRow(node.id, pos.x, pos.y - 1)});
             if (pos.y < columns[pos.x].length - 1)
-                items.push({ label: 'Move folder down', action: () => addRow(node.id, pos.x, pos.y + 2) });
+                items.push({label: 'Move folder down', action: () => addRow(node.id, pos.x, pos.y + 2)});
             if (pos.x > 0)
-                items.push({ label: 'Move folder left', action: () => addRow(node.id, pos.x - 1) });
+                items.push({label: 'Move folder left', action: () => addRow(node.id, pos.x - 1)});
             if (pos.x < columns.length - 1)
-                items.push({ label: 'Move folder right', action: () => addRow(node.id, pos.x + 1) });
+                items.push({label: 'Move folder right', action: () => addRow(node.id, pos.x + 1)});
             if (!root.includes(node.id))
-                items.push({ label: 'Remove folder', action: () => removeRow(pos.x, pos.y) });
+                items.push({label: 'Remove folder', action: () => removeRow(pos.x, pos.y)});
         }
     }
 
-    a.oncontextmenu = e => { renderMenu(items, e.pageX, e.pageY); return false; };
+    a.oncontextmenu = e => {
+        renderMenu(items, e.pageX, e.pageY);
+        return false;
+    };
 }
 
 // enables context menu for given column
 function addColumnHandlers(index, ul) {
     const ids = columns[index];
-    let items = ids.length === 1 ? getMenuItems({ id: ids[0] }) : [];
+    let items = ids.length === 1 ? getMenuItems({id: ids[0]}) : [];
 
     // column layout items
     if (!getConfig('lock') && columns.length > 1) {
         items.push(null); // spacer
         if (index > 0)
-            items.push({ label: 'Move column left', action: () => addColumn(ids, index - 1) });
+            items.push({label: 'Move column left', action: () => addColumn(ids, index - 1)});
         if (index < columns.length - 1)
-            items.push({ label: 'Move column right', action: () => addColumn(ids, index + 2) });
-        items.push({ label: 'Remove column', action: () => removeColumn(index) });
+            items.push({label: 'Move column right', action: () => addColumn(ids, index + 2)});
+        items.push({label: 'Remove column', action: () => removeColumn(index)});
         if (ids.length === 1) {
             if (index > 0)
-                items.push({ label: 'Move folder left', action: () => addRow(ids[0], index - 1) });
+                items.push({label: 'Move folder left', action: () => addRow(ids[0], index - 1)});
             if (index < columns.length - 1)
-                items.push({ label: 'Move folder right', action: () => addRow(ids[0], index + 1) });
+                items.push({label: 'Move folder right', action: () => addRow(ids[0], index + 1)});
         }
     }
 
@@ -674,13 +698,13 @@ function addColumnHandlers(index, ul) {
 
 // gets context menu items for given node
 function getMenuItems(node) {
-    const items = [{ label: 'Open all links in folder', action: () => openLinks(node) }];
+    const items = [{label: 'Open all links in folder', action: () => openLinks(node)}];
     if (node.id === 'closed')
-        items.push({ label: 'Clear browsing data', action: () => openLink({ url: 'chrome://settings/clearBrowserData' }, 1) });
+        items.push({label: 'Clear browsing data', action: () => openLink({url: 'chrome://settings/clearBrowserData'}, 1)});
     if (node.id === 'devices')
-        items.push({ label: 'History', action: () => openLink({ url: 'chrome://history' }, 1) });
+        items.push({label: 'History', action: () => openLink({url: 'chrome://history'}, 1)});
     if (Number(node.id))
-        items.push({ label: 'Edit bookmarks', action: () => openLink({ url: `chrome://bookmarks/?id=${node.id}` }, 1) });
+        items.push({label: 'Edit bookmarks', action: () => openLink({url: `chrome://bookmarks/?id=${node.id}`}, 1)});
     return items;
 }
 
@@ -703,7 +727,10 @@ function renderMenu(items, x, y) {
         const a = document.createElement('a');
         a.innerText = item.label;
         a.tabIndex = 0;
-        a.onclick = () => { item.action(); return false; };
+        a.onclick = () => {
+            item.action();
+            return false;
+        };
         li.appendChild(a);
         ul.appendChild(li);
     });
@@ -711,14 +738,23 @@ function renderMenu(items, x, y) {
     document.body.appendChild(ul);
     ul.style.left = `${Math.max(Math.min(x, window.innerWidth + window.scrollX - ul.clientWidth), 0)}px`;
     ul.style.top = `${Math.max(Math.min(y, window.innerHeight + window.scrollY - ul.clientHeight), 0)}px`;
-    ul.onmousedown = e => { e.stopPropagation(); return true; };
+    ul.onmousedown = e => {
+        e.stopPropagation();
+        return true;
+    };
 
     setTimeout(() => {
-        const closeHandler = () => { closeMenu(ul); return true; };
+        const closeHandler = () => {
+            closeMenu(ul);
+            return true;
+        };
         document.onclick = closeHandler;
         document.onmousedown = closeHandler;
         document.oncontextmenu = closeHandler;
-        document.onkeydown = e => { if (e.key === 'Escape') closeMenu(ul); return true; };
+        document.onkeydown = e => {
+            if (e.key === 'Escape') closeMenu(ul);
+            return true;
+        };
     }, 20);
     return ul;
 }
@@ -1067,7 +1103,7 @@ async function openLinks(node) {
 
 // opens given node
 function openLink(node, newtab) {
-    const { url } = node;
+    const {url} = node;
     if (!url) return;
 
     if (newtab) {
@@ -1107,7 +1143,7 @@ function verifyColumns() {
             columns.splice(x, 1);
         } else {
             columns[x].forEach((id, y) => {
-                coords[id] = { x, y };
+                coords[id] = {x, y};
             });
         }
     }
@@ -1154,13 +1190,13 @@ async function loadColumns() {
 
     // Load ALL data into memory cache FIRST (single IndexedDB read)
     // This is faster than multiple individual reads and makes subsequent calls instant
-    Perf.mark('loadAllData start');
     try {
+        Perf.mark('loadAllData start');
         await BookmarkCache.loadAllData();
+        Perf.mark('loadAllData end');
     } catch (e) {
         console.error('[BookmarkCache] loadAllData failed:', e);
     }
-    Perf.mark('loadAllData end');
 
     columns = [];
     forEachColumnEntry((x, y, id) => {
@@ -1226,7 +1262,7 @@ function removeIdsFromColumns(ids, xpos, ypos) {
             x--;
         }
     }
-    return { xpos, ypos };
+    return {xpos, ypos};
 }
 
 // creates and saves a new column
@@ -1276,7 +1312,7 @@ function refreshClosed() {
         targets.push(target);
     }
 
-    getChildren({ id: 'closed' }).then(result => {
+    getChildren({id: 'closed'}).then(result => {
         targets.forEach(target => renderAll(result, target));
     });
 }
@@ -1373,30 +1409,33 @@ const styles = {};
 
 // Style schema: maps config keys to CSS generation rules
 const styleSchema = {
-    font:                 { sel: '#main a', prop: 'font-family', fmt: v => `"${v}"` },
-    font_size:            { sel: '#main a', prop: 'font-size', fmt: v => `${v / 10}em` },
-    font_weight:          { sel: '#main a', prop: 'font-weight' },
-    font_color:           { sel: '#main a', prop: 'color' },
-    background_color:     { sel: 'body', prop: 'background-color' },
-    background_image:     { sel: 'body', prop: 'background-image', fmt: v => `url(${v})` },
-    background_image_file:{ sel: 'body', prop: 'background-image', fmt: v => `url(${v})` },
-    background_align:     { sel: 'body', prop: 'background-position' },
-    background_repeat:    { sel: 'body', prop: 'background-repeat' },
-    background_size:      { sel: 'body', prop: 'background-size' },
-    highlight_font_color: { sel: '#main a:hover', prop: 'color' },
-    highlight_color:      { sel: '#main a:hover', prop: 'background-color' },
-    shadow_color:         v => `#main a:hover { box-shadow: 0 0 ${scale(getConfig('shadow_blur'), 7, 100)}px ${v}; }`,
-    shadow_blur:          v => `#main a:hover { box-shadow: 0 0 ${scale(v, 7, 100)}px ${getConfig('shadow_color')}; }`,
-    highlight_round:      { sel: '#main a', prop: 'border-radius', fmt: v => `${scale(v, 0.2, 1.5)}em` },
-    fade:                 { sel: '#main a', prop: 'transition-duration', fmt: v => `${scale(v, 0.2, 1)}s` },
-    slide:                { sel: '.wrap', prop: 'transition-duration', fmt: v => `${scale(v, 0.2, 1)}s` },
-    spacing:              v => `#main a { line-height: ${scale(v, 2, 5.6, 0.8)}; padding-left: ${scale(v, 0.8, 2, 0.4)}em; padding-right: ${scale(v, 0.8, 2, 0.4)}em; }`,
-    width:                v => `#main { width: ${getConfig('auto_scale') ? `${scale(v, 80, 100, 20)}%` : `${scale(v, 1000, 3000, 400)}px`}; }`,
-    h_pos:                v => { const margin = 100 - scale(getConfig('width'), 80, 100, 20); return `#main { left: ${scale(v, 0, margin / 2, -margin / 2)}%; }`; },
-    v_margin:             v => `#main { margin-top: ${getConfig('auto_scale') ? `${scale(v, 5, 20)}%` : `${scale(v, 80, 600)}px`}; }`,
-    hide_options:         () => '#options_button { opacity: 0; }',
-    css:                  v => v,
-    auto_scale:           v => v ? null : '#main { margin-top: 80px; width: 1000px; }'
+    font: {sel: '#main a', prop: 'font-family', fmt: v => `"${v}"`},
+    font_size: {sel: '#main a', prop: 'font-size', fmt: v => `${v / 10}em`},
+    font_weight: {sel: '#main a', prop: 'font-weight'},
+    font_color: {sel: '#main a', prop: 'color'},
+    background_color: {sel: 'body', prop: 'background-color'},
+    background_image: {sel: 'body', prop: 'background-image', fmt: v => `url(${v})`},
+    background_image_file: {sel: 'body', prop: 'background-image', fmt: v => `url(${v})`},
+    background_align: {sel: 'body', prop: 'background-position'},
+    background_repeat: {sel: 'body', prop: 'background-repeat'},
+    background_size: {sel: 'body', prop: 'background-size'},
+    highlight_font_color: {sel: '#main a:hover', prop: 'color'},
+    highlight_color: {sel: '#main a:hover', prop: 'background-color'},
+    shadow_color: v => `#main a:hover { box-shadow: 0 0 ${scale(getConfig('shadow_blur'), 7, 100)}px ${v}; }`,
+    shadow_blur: v => `#main a:hover { box-shadow: 0 0 ${scale(v, 7, 100)}px ${getConfig('shadow_color')}; }`,
+    highlight_round: {sel: '#main a', prop: 'border-radius', fmt: v => `${scale(v, 0.2, 1.5)}em`},
+    fade: {sel: '#main a', prop: 'transition-duration', fmt: v => `${scale(v, 0.2, 1)}s`},
+    slide: {sel: '.wrap', prop: 'transition-duration', fmt: v => `${scale(v, 0.2, 1)}s`},
+    spacing: v => `#main a { line-height: ${scale(v, 2, 5.6, 0.8)}; padding-left: ${scale(v, 0.8, 2, 0.4)}em; padding-right: ${scale(v, 0.8, 2, 0.4)}em; }`,
+    width: v => `#main { width: ${getConfig('auto_scale') ? `${scale(v, 80, 100, 20)}%` : `${scale(v, 1000, 3000, 400)}px`}; }`,
+    h_pos: v => {
+        const margin = 100 - scale(getConfig('width'), 80, 100, 20);
+        return `#main { left: ${scale(v, 0, margin / 2, -margin / 2)}%; }`;
+    },
+    v_margin: v => `#main { margin-top: ${getConfig('auto_scale') ? `${scale(v, 5, 20)}%` : `${scale(v, 80, 600)}px`}; }`,
+    hide_options: () => '#options_button { opacity: 0; }',
+    css: v => v,
+    auto_scale: v => v ? null : '#main { margin-top: 80px; width: 1000px; }'
 };
 
 function getStyle(key, value) {
@@ -1517,7 +1556,11 @@ function initConfig(key) {
     reset.className = 'revert';
     reset.title = 'Reset to default';
     reset.tabIndex = 0;
-    reset.onclick = () => { setConfig(key, null); showConfig(key); return false; };
+    reset.onclick = () => {
+        setConfig(key, null);
+        showConfig(key);
+        return false;
+    };
 
     input.reset = reset;
     input.parentNode.appendChild(reset);
@@ -1530,7 +1573,10 @@ let settingsInitialized = false;
 function initSettings() {
     settingsInitialized = true;
 
-    document.getElementById('options_close_button').onclick = () => { showOptions(false); return false; };
+    document.getElementById('options_close_button').onclick = () => {
+        showOptions(false);
+        return false;
+    };
 
     const options = document.getElementById('options');
     const nav = document.getElementById('options_nav');
@@ -1538,7 +1584,7 @@ function initSettings() {
 
     [...nav.children].forEach((li, i) => {
         const a = li.firstChild;
-        a.onclick = function() {
+        a.onclick = function () {
             // clear current style
             nav.children[currentIndex].firstChild.classList.remove('current');
             options.getElementsByClassName('section')[currentIndex].classList.remove('current');
@@ -1638,7 +1684,7 @@ function initSettings() {
             const select = document.getElementById('options_font');
             if (select.childNodes.length > 0) return;
 
-            [{ fontId: 'Sans-serif' }, ...fonts].forEach(({ fontId }) => {
+            [{fontId: 'Sans-serif'}, ...fonts].forEach(({fontId}) => {
                 const option = document.createElement('option');
                 option.innerText = fontId;
                 option.selected = fontId === getConfig('font');
@@ -1675,7 +1721,10 @@ document.addEventListener('keydown', () => document.body.classList.remove('hide-
 window.onresize = updateTooltips;
 
 // load options panel
-document.getElementById('options_button').onclick = () => { showOptions(true); return false; };
+document.getElementById('options_button').onclick = () => {
+    showOptions(true);
+    return false;
+};
 if (location.search === '?options') showOptions(true);
 
 // Export for testing

@@ -249,6 +249,9 @@ describe('newtab.js', () => {
                 { id: 'r2', title: 'Recent 2', url: 'https://recent2.com' }
             ];
             await BookmarkCache.setSpecialFolder('recent', mockRecent);
+            // Reload in-memory cache to pick up the new data
+            // (In production, the service worker writes and newtab.js reads fresh on page load)
+            await BookmarkCache.loadAllData(true);
 
             const { getChildren_internal } = require('../newtab.js');
             const result = await getChildren_internal('recent');

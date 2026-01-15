@@ -24,7 +24,6 @@ const BookmarkCache = {
     _db: null,
     _dbPromise: null, // Prevent concurrent openDB calls
     _allDataCache: null, // In-memory cache of all data for fast reads
-    _allDataCacheTime: 0, // When the cache was populated
 
     /**
      * Open/create the IndexedDB database
@@ -89,22 +88,11 @@ const BookmarkCache = {
                     cache.set(record.key, record);
                 }
                 this._allDataCache = cache;
-                this._allDataCacheTime = Date.now();
                 const duration = performance.now() - start;
                 console.log(`[BookmarkCache] loadAllData: loaded ${cache.size} records in ${duration.toFixed(2)}ms`);
                 resolve(cache);
             };
         });
-    },
-
-    /**
-     * Invalidate the in-memory cache (call after writes)
-     */
-    invalidateCache() {
-        console.log('[BookmarkCache] invalidateCache called');
-        console.trace();
-        this._allDataCache = null;
-        this._allDataCacheTime = 0;
     },
 
     /**
@@ -210,10 +198,6 @@ const BookmarkCache = {
      */
     async put(key, value) {
         const record = { ...value, key };
-        // Update in-memory cache if it exists (don't invalidate)
-        if (this._allDataCache) {
-            this._allDataCache.set(key, record);
-        }
         const db = await this.openDB();
         return new Promise((resolve, reject) => {
             const tx = db.transaction(this.STORE_NAME, 'readwrite');
@@ -230,12 +214,6 @@ const BookmarkCache = {
      * @returns {Promise<void>}
      */
     async putMany(records) {
-        // Update in-memory cache if it exists (don't invalidate)
-        if (this._allDataCache) {
-            records.forEach(({ key, value }) => {
-                this._allDataCache.set(key, { ...value, key });
-            });
-        }
         const db = await this.openDB();
         return new Promise((resolve, reject) => {
             const tx = db.transaction(this.STORE_NAME, 'readwrite');
@@ -256,13 +234,6 @@ const BookmarkCache = {
      * @returns {Promise<void>}
      */
     async replaceAll(records) {
-        // Rebuild in-memory cache with new data
-        if (this._allDataCache) {
-            this._allDataCache.clear();
-            records.forEach(({ key, value }) => {
-                this._allDataCache.set(key, { ...value, key });
-            });
-        }
         const db = await this.openDB();
         return new Promise((resolve, reject) => {
             const tx = db.transaction(this.STORE_NAME, 'readwrite');
