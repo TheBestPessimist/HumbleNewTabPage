@@ -576,6 +576,8 @@ async function expandDeferredFolders() {
 
             delete a.dataset.autoExpand;
             const children = await getChildren({ id: nodeId, children: true });
+            const folderName = a.textContent || nodeId;
+            Perf.mark(`Auto-expand "${folderName}": ${children.length} bookmarks`);
             // Replace the folder header with its children directly in the column
             const column = li.closest('.column');
             const ul = li.parentNode;
@@ -610,6 +612,8 @@ async function expandDeferredFolders() {
 
             delete a.dataset.deferred;
             const children = await getChildren({ id: nodeId, children: true });
+            const folderName = a.textContent || nodeId;
+            Perf.mark(`Deferred "${folderName}": ${children.length} bookmarks`);
             if (!a.nextSibling && a.open) {
                 renderAll(children, li);
             }
@@ -619,6 +623,7 @@ async function expandDeferredFolders() {
     if (totalDeferred > 0) {
         Perf.mark(`Expanded ${totalDeferred} deferred folders`);
     }
+    Perf.mark('Finished loading');
 }
 
 // enables click and context menu for given folder
