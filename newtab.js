@@ -267,17 +267,16 @@ const getBookmarkNodes = ids =>
 	Perf.trackApi(`chrome.bookmarks.get(${ids.length} ids)`, () =>
 		chrome.bookmarks.get(ids).then(r => r || []));
 
-const getBookmarkChildren = async id => {
+const getBookmarkChildren = async (id, folderName) => {
 	const start = performance.now();
 	const result = await chrome.bookmarks.getChildren(id).then(r => r || []);
 	const duration = performance.now() - start;
-	// Get folder name from cache or result's parent
-	const folderName = prefetchedData.nodes[id]?.title || `id:${id}`;
-	const apiName = `chrome.bookmarks.getChildren(${id}); folder: "${folderName}"; children: ${result.length}`;
+	const name = folderName || prefetchedData.nodes[id]?.title || `id:${id}`;
+	const apiName = `chrome.bookmarks.getChildren(${id})`;
 	Perf.apiCalls.count++;
 	Perf.apiCalls.totalTime += duration;
 	Perf.apiCalls.calls.push({ api: apiName, duration });
-	if (Perf.enabled) console.log(`[PERF:API] ${apiName}: ${duration.toFixed(2)}ms`);
+	if (Perf.enabled) console.log(`[PERF:API] ${apiName}; folder: "${name}"; children: ${result.length}: ${duration.toFixed(2)}ms`);
 	return result;
 };
 
@@ -325,7 +324,7 @@ function forEachColumnEntry(fn) {
 }
 
 // Get cached children or fetch if not available (works for both regular and special folders)
-async function getCachedChildren(id) {
+async function getCachedChildren(id, folderName) {
 	// Use cache if available
 	if (id in prefetchedData.children) {
 		const result = prefetchedData.children[id];
@@ -340,7 +339,7 @@ async function getCachedChildren(id) {
 	if (SpecialFolders.isFolder(id)) {
 		return SpecialFolders.fetchChildren(id);
 	}
-	const children = await getBookmarkChildren(id);
+	const children = await getBookmarkChildren(id, folderName);
 	markFolders(children);
 	prefetchedData.children[id] = children;
 	return children;
@@ -585,9 +584,8 @@ async function expandDeferredFolders() {
             if (!nodeId) return;
 
             delete a.dataset.autoExpand;
-            const children = await getChildren({ id: nodeId, children: true });
             const folderName = a.textContent || nodeId;
-            Perf.mark(`Auto-expand "${folderName}": ${children.length} bookmarks`);
+            const children = await getChildren({ id: nodeId, children: true }, folderName);
             // Replace the folder header with its children directly in the column
             const column = li.closest('.column');
             const ul = li.parentNode;
@@ -621,9 +619,8 @@ async function expandDeferredFolders() {
             if (!nodeId || !a.open || a.nextSibling) return;
 
             delete a.dataset.deferred;
-            const children = await getChildren({ id: nodeId, children: true });
             const folderName = a.textContent || nodeId;
-            Perf.mark(`Deferred "${folderName}": ${children.length} bookmarks`);
+            const children = await getChildren({ id: nodeId, children: true }, folderName);
             if (!a.nextSibling && a.open) {
                 renderAll(children, li);
             }
@@ -935,10 +932,10 @@ function updateTooltips() {
 }
 
 // Gets children of a node (returns Promise)
-async function getChildren(node) {
+async function getChildren(node, folderName) {
     if (Array.isArray(node.children)) return node.children;
 
-    const children = await getCachedChildren(node.id);
+    const children = await getCachedChildren(node.id, folderName);
     if (!children && coords[node.id]) {
         removeRow(coords[node.id].x, coords[node.id].y);
     }
