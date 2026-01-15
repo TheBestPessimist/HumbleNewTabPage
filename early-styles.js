@@ -25,6 +25,7 @@
     document.documentElement.style.setProperty('--initial-color', fontColor);
     // Apply immediately via style element for fastest paint
     const style = document.createElement('style');
-    style.textContent = 'body{background-color:' + bgColor + ' !important}#main a{color:' + fontColor + '}';
+    style.id = 'early-styles';
+    style.textContent = 'body{background-color:' + bgColor + '}#main a{color:' + fontColor + '}';
     document.head.appendChild(style);
 })();

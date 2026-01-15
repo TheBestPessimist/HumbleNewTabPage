@@ -593,25 +593,30 @@ async function expandDeferredFolders() {
     // Handle deferred open folders (folders that were open but children weren't rendered yet)
     const deferredLinks = [...document.querySelectorAll('#main a.folder[data-deferred="true"]')];
 
-    if (deferredLinks.length === 0) return;
+    if (deferredLinks.length > 0) {
+        Perf.mark(`Expanding ${deferredLinks.length} deferred folders`);
 
-    Perf.mark(`Expanding ${deferredLinks.length} deferred folders`);
+        // Expand all deferred folders in parallel
+        await Promise.all(deferredLinks.map(async (a) => {
+            const li = a.parentNode;
+            const nodeId = li?.dataset?.nodeId;
 
-    // Expand all deferred folders in parallel
-    await Promise.all(deferredLinks.map(async (a) => {
-        const li = a.parentNode;
-        const nodeId = li?.dataset?.nodeId;
+            if (!nodeId || !a.open || a.nextSibling) return;
 
-        if (!nodeId || !a.open || a.nextSibling) return;
+            delete a.dataset.deferred;
+            const children = await getChildren({ id: nodeId, children: true });
+            if (!a.nextSibling && a.open) {
+                renderAll(children, li);
+            }
+        }));
 
-        delete a.dataset.deferred;
-        const children = await getChildren({ id: nodeId, children: true });
-        if (!a.nextSibling && a.open) {
-            renderAll(children, li);
-        }
-    }));
+        Perf.mark('Deferred folders expanded');
+    }
 
-    Perf.mark('Deferred folders expanded');
+    // Activate favicons for all newly rendered bookmarks (from both auto-expand and deferred folders)
+    if (typeof FaviconCache !== 'undefined') {
+        FaviconCache.activateFavicons();
+    }
 }
 
 // enables click and context menu for given folder
@@ -1017,6 +1022,10 @@ async function toggle(node, a) {
             const result = await getChildren(node);
             if (!a.nextSibling && a.open) {
                 renderAll(result, a.parentNode);
+                // Activate favicons for newly rendered bookmarks
+                if (typeof FaviconCache !== 'undefined') {
+                    FaviconCache.activateFavicons();
+                }
                 animate(node, a, isopen);
             }
         }
@@ -1150,9 +1159,13 @@ async function loadColumns() {
     if (typeof requestAnimationFrame !== 'undefined') {
         Perf.waitForPaintAndReport();
 
-        // After first paint, load children progressively and expand deferred folders
+        // After first paint, activate favicons and load children progressively
         requestAnimationFrame(() => {
             requestAnimationFrame(() => {
+                // Start loading favicons now that bookmarks are painted
+                if (typeof FaviconCache !== 'undefined') {
+                    FaviconCache.activateFavicons();
+                }
                 // Load children data in background, then expand folders
                 loadChildrenProgressively().then(() => {
                     expandDeferredFolders();
@@ -1286,6 +1299,10 @@ function refreshClosed() {
 
     getChildren({ id: 'closed' }).then(result => {
         targets.forEach(target => renderAll(result, target));
+        // Activate favicons for newly rendered bookmarks
+        if (typeof FaviconCache !== 'undefined') {
+            FaviconCache.activateFavicons();
+        }
     });
 }
 
@@ -1541,6 +1558,8 @@ function onChange(key, value) {
 // loads config settings
 function loadSettings() {
     Perf.mark('loadSettings start');
+    // Remove early-styles.js overrides so new settings can take effect
+    document.getElementById('early-styles')?.remove();
     theme = themes[getConfig('theme')] || {};
     Object.keys(config).forEach(key => {
         if (key === 'background_image_file') {
@@ -1655,12 +1674,19 @@ function initSettings() {
                 imports.onchange = () => {
                     try {
                         const imported = JSON.parse(imports.value);
+                        // Clear existing settings before importing to ensure clean state
+                        Object.keys(localStorage).forEach(k => {
+                            if (k.startsWith('options.') || k.startsWith('open.') || k.startsWith('column.')) {
+                                localStorage.removeItem(k);
+                            }
+                        });
                         Object.entries(imported).forEach(([k, v]) => localStorage.setItem(k, v));
                         imports.value = '';
                         imports.placeholder = 'Import successful!';
                         exports.value = JSON.stringify(localStorage, replacer);
                         loadSettings();
                         loadColumns();
+                        Object.keys(config).forEach(showConfig);
                     } catch {
                         imports.value = '';
                         imports.placeholder = 'Import error! Please check if your settings are valid JSON.';
