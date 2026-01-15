@@ -1100,7 +1100,7 @@ function verifyColumns() {
     // default layout
     if (columns.length === 0) {
         columns.push([]);
-        columns.push(special.filter(a => getConfig(`show_${a}`) !== false));
+        columns.push(special.filter(a => getConfig(`show_${a}`)));
     }
 
     // find missing root items
@@ -1109,7 +1109,7 @@ function verifyColumns() {
 
     // add missing root items
     missing.forEach(id => {
-        if (getConfig(`show_${id}`) !== false) {
+        if (getConfig(`show_${id}`)) {
             columns[0].push(id);
         }
     });
@@ -1666,7 +1666,7 @@ function initSettings() {
                 const exports = document.getElementById('options_export');
                 const imports = document.getElementById('options_import');
                 const replacer = (k, v) =>
-                    (k === 'options.background_image_file' || k === 'weather.cache') ? undefined : v;
+                    (k === 'options.background_image_file' || k.startsWith('cache.') || k.startsWith('weather.')) ? undefined : v;
 
                 exports.value = JSON.stringify(localStorage, replacer);
                 imports.value = '';
@@ -1674,12 +1674,7 @@ function initSettings() {
                 imports.onchange = () => {
                     try {
                         const imported = JSON.parse(imports.value);
-                        // Clear existing settings before importing to ensure clean state
-                        Object.keys(localStorage).forEach(k => {
-                            if (k.startsWith('options.') || k.startsWith('open.') || k.startsWith('column.')) {
-                                localStorage.removeItem(k);
-                            }
-                        });
+                        localStorage.clear();
                         Object.entries(imported).forEach(([k, v]) => localStorage.setItem(k, v));
                         imports.value = '';
                         imports.placeholder = 'Import successful!';
