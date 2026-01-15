@@ -398,12 +398,17 @@ const BookmarkCache = {
         // Flatten to records
         const folderRecords = this.flattenTree(tree);
 
+        // Pre-compute recent bookmarks from the tree
+        const recentBookmarks = this.extractRecentBookmarks(tree, 20);
+
         // Add metadata
         const now = Date.now();
         const allRecords = [
             ...folderRecords,
             { key: 'meta:version', value: { value: this.CACHE_VERSION } },
-            { key: 'meta:lastSync', value: { value: now } }
+            { key: 'meta:lastSync', value: { value: now } },
+            // Pre-cache recent bookmarks (no TTL needed - refreshed on every sync)
+            { key: 'special:recent', value: { data: recentBookmarks, cachedAt: now } }
         ];
 
         // Replace all data atomically
@@ -411,6 +416,77 @@ const BookmarkCache = {
 
         const syncTime = performance.now() - startTime;
         return { folderCount: folderRecords.length, syncTime };
+    },
+
+    // =========================================================================
+    // SPECIAL FOLDER CACHING - Cache special folder data with TTL
+    // =========================================================================
+
+    // TTL values in milliseconds
+    SPECIAL_TTL: {
+        top: 10 * 60 * 1000,    // 10 minutes for top sites
+        recent: Infinity,       // Recent bookmarks: no TTL (refreshed on bookmark sync)
+        closed: 1 * 60 * 1000,  // 1 minute for recently closed
+        devices: 1 * 60 * 1000  // 1 minute for other devices
+    },
+
+    /**
+     * Extract recent bookmarks from the full tree (sorted by dateAdded)
+     * @param {Array} tree - Result from chrome.bookmarks.getTree()
+     * @param {number} limit - Maximum number of bookmarks to return
+     * @returns {Array} Recent bookmarks sorted by dateAdded descending
+     */
+    extractRecentBookmarks(tree, limit = 20) {
+        const bookmarks = [];
+
+        function collectBookmarks(node) {
+            if (node.url && node.dateAdded) {
+                bookmarks.push({
+                    id: node.id,
+                    title: node.title,
+                    url: node.url,
+                    dateAdded: node.dateAdded
+                });
+            }
+            if (node.children) {
+                node.children.forEach(collectBookmarks);
+            }
+        }
+
+        tree.forEach(collectBookmarks);
+
+        // Sort by dateAdded descending and take top N
+        bookmarks.sort((a, b) => b.dateAdded - a.dateAdded);
+        return bookmarks.slice(0, limit);
+    },
+
+    /**
+     * Get cached special folder data if not expired
+     * @param {string} specialId - Special folder ID (top, recent, closed, devices)
+     * @returns {Promise<{data: Array, fresh: boolean}|null>} Cached data or null if expired/missing
+     */
+    async getSpecialFolder(specialId) {
+        const record = await this.get(`special:${specialId}`);
+        if (!record) return null;
+
+        const ttl = this.SPECIAL_TTL[specialId];
+        const age = Date.now() - (record.cachedAt || 0);
+        const fresh = age < ttl;
+
+        return { data: record.data || [], fresh };
+    },
+
+    /**
+     * Store special folder data with timestamp
+     * @param {string} specialId - Special folder ID
+     * @param {Array} data - The folder children data
+     * @returns {Promise<void>}
+     */
+    async setSpecialFolder(specialId, data) {
+        await this.put(`special:${specialId}`, {
+            data,
+            cachedAt: Date.now()
+        });
     }
 };
 

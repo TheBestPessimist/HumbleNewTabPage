@@ -20,6 +20,8 @@ let syncInProgress = false;
 let lastSyncAttempt = 0;
 const SYNC_DEBOUNCE_MS = 1000; // Debounce rapid bookmark changes
 const HOURLY_SYNC_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
+const SESSIONS_DEBOUNCE_MS = 10 * 1000; // 10 seconds debounce for session changes
+let sessionsSyncTimeout = null;
 
 /**
  * Perform a full bookmark sync with debouncing
@@ -128,21 +130,107 @@ chrome.runtime.onStartup.addListener(() => {
 });
 
 // =============================================================================
+// SESSIONS CACHING (closed tabs + other devices)
+// =============================================================================
+
+/**
+ * Sync recently closed tabs to cache
+ * @param {string} reason - Why the sync was triggered
+ */
+async function syncClosedTabs(reason) {
+    try {
+        // Get max 20 recently closed (we'll slice to user preference in newtab.js)
+        const sessions = await chrome.sessions.getRecentlyClosed({ maxResults: 20 });
+        const closed = sessions.map(session => {
+            // Normalize window with single tab to just a tab
+            if (session.window?.tabs.length === 1) {
+                session.tab = session.window.tabs[0];
+            }
+            return {
+                sessionId: session.window ? session.window.sessionId : session.tab.sessionId,
+                title: session.tab ? session.tab.title : `${session.window.tabs.length} Tabs`,
+                url: session.tab?.url ?? null,
+                isWindow: !!session.window
+            };
+        });
+        await BookmarkCache.setSpecialFolder('closed', closed);
+        console.log(`[Sessions] Cached ${closed.length} closed tabs (reason: ${reason})`);
+    } catch (error) {
+        console.error('[Sessions] Failed to sync closed tabs:', error);
+    }
+}
+
+/**
+ * Sync other devices to cache
+ * @param {string} reason - Why the sync was triggered
+ */
+async function syncDevices(reason) {
+    try {
+        const devices = await chrome.sessions.getDevices({ maxResults: 10 });
+        const deviceData = devices.map(device => {
+            const children = device.sessions.flatMap(session => {
+                const tabs = session.window ? session.window.tabs : [session.tab];
+                return tabs.map(tab => ({ title: tab.title, url: tab.url }));
+            });
+            return {
+                id: `device.${device.deviceName}`,
+                title: device.deviceName,
+                children
+            };
+        });
+        await BookmarkCache.setSpecialFolder('devices', deviceData);
+        console.log(`[Sessions] Cached ${deviceData.length} devices (reason: ${reason})`);
+    } catch (error) {
+        console.error('[Sessions] Failed to sync devices:', error);
+    }
+}
+
+/**
+ * Sync all session data (closed + devices)
+ */
+async function syncSessions(reason) {
+    await Promise.all([
+        syncClosedTabs(reason),
+        syncDevices(reason)
+    ]);
+}
+
+// Listen for session changes (debounced to avoid rapid syncs when closing multiple tabs)
+chrome.sessions.onChanged.addListener(() => {
+    if (sessionsSyncTimeout) {
+        clearTimeout(sessionsSyncTimeout);
+    }
+    sessionsSyncTimeout = setTimeout(() => {
+        console.log('[Sessions] Session changed (debounced)');
+        syncSessions('session-changed');
+        sessionsSyncTimeout = null;
+    }, SESSIONS_DEBOUNCE_MS);
+});
+
+// =============================================================================
 // PERIODIC SYNC USING ALARMS
 // =============================================================================
 
-const ALARM_NAME = 'bookmark-cache-sync';
+const BOOKMARK_ALARM_NAME = 'bookmark-cache-sync';
+const SESSIONS_ALARM_NAME = 'sessions-cache-sync';
 
-// Create hourly alarm
-chrome.alarms.create(ALARM_NAME, {
-    periodInMinutes: 60
+// Create alarms
+chrome.alarms.create(BOOKMARK_ALARM_NAME, {
+    periodInMinutes: 60 // Hourly for bookmarks
 });
 
-// Handle alarm
+chrome.alarms.create(SESSIONS_ALARM_NAME, {
+    periodInMinutes: 1 // Every minute for sessions
+});
+
+// Handle alarms
 chrome.alarms.onAlarm.addListener((alarm) => {
-    if (alarm.name === ALARM_NAME) {
+    if (alarm.name === BOOKMARK_ALARM_NAME) {
         console.log('[BookmarkCache] Hourly alarm triggered');
         checkAndSync();
+    } else if (alarm.name === SESSIONS_ALARM_NAME) {
+        console.log('[Sessions] Minute alarm triggered');
+        syncSessions('alarm');
     }
 });
 
@@ -150,8 +238,8 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 // INITIAL CHECK ON SCRIPT LOAD
 // =============================================================================
 
-// When service worker starts, check cache status
+// When service worker starts, check cache status and sync sessions
 checkAndSync();
+syncSessions('startup');
 
 console.log('[BookmarkCache] Service worker initialized');
-

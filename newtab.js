@@ -242,25 +242,69 @@ const SpecialFolders = {
 	},
 
 	// Fetch children data for a special folder
+	// ONLY reads from IndexedDB cache - no Chrome API fallback
+	// Exception: 'top' sites must be fetched here (SW can't access chrome.topSites)
 	async fetchChildren(id) {
 		const def = this.defs[id];
 		if (!def?.isFolder) return [];
+		const limit = getConfigValue(def.configKey, 10);
 
-		switch (id) {
-			case 'top':
-				if (!chrome.topSites) return [];
-				return Perf.trackApi('chrome.topSites.get', () =>
-					chrome.topSites.get().then(r => (r || []).slice(0, getConfigValue('number_top', 10))));
-			case 'recent':
-				return Perf.trackApi('chrome.bookmarks.getRecent', () =>
-					chrome.bookmarks.getRecent(getConfigValue('number_recent', 10)).then(r => r || []));
-			case 'closed':
-				return Perf.trackApi('chrome.sessions.getRecentlyClosed', () => getClosed());
-			case 'devices':
-				return Perf.trackApi('chrome.sessions.getDevices', () => getDevices());
-			default:
-				return [];
+		// 'top' is special - SW can't cache it, so we fetch and cache here
+		if (id === 'top') {
+			return this._fetchTopSites(limit);
 		}
+
+		// All other special folders: read from cache only, no API fallback
+		const cached = await BookmarkCache.getSpecialFolder(id);
+		if (cached?.data) {
+			const status = cached.fresh ? 'fresh' : 'stale';
+			console.log(`[SpecialFolders] CACHE ${status}: ${id} (${cached.data.length} items)`);
+			Perf.cacheCalls.count++;
+			Perf.cacheCalls.calls.push({ api: `cache.special:${id}`, duration: 0 });
+			return this._hydrateData(id, cached.data.slice(0, limit));
+		}
+
+		// Cache miss - return empty, don't call Chrome APIs
+		return [];
+	},
+
+	// Fetch top sites (only special folder that newtab.js fetches directly)
+	async _fetchTopSites(limit) {
+		// Try cache first
+		const cached = await BookmarkCache.getSpecialFolder('top');
+		if (cached?.fresh) {
+			console.log(`[SpecialFolders] CACHE HIT: top (${cached.data.length} items)`);
+			Perf.cacheCalls.count++;
+			Perf.cacheCalls.calls.push({ api: `cache.special:top`, duration: 0 });
+			return cached.data.slice(0, limit);
+		}
+
+		// Cache miss or stale - fetch from API (only for 'top')
+		if (!chrome.topSites) return [];
+		const reason = cached ? 'stale' : 'missing';
+		console.log(`[SpecialFolders] CACHE ${reason}: top - fetching from chrome.topSites`);
+
+		const freshData = await Perf.trackApi('chrome.topSites.get', () =>
+			chrome.topSites.get().then(r => r || []));
+
+		// Cache for next time
+		BookmarkCache.setSpecialFolder('top', freshData).catch(e =>
+			console.warn(`[SpecialFolders] Failed to cache top:`, e));
+
+		return freshData.slice(0, limit);
+	},
+
+	// Hydrate cached data with runtime properties (action callbacks, className)
+	_hydrateData(id, data) {
+		if (id === 'closed') {
+			return data.map(item => ({
+				...item,
+				className: item.isWindow ? 'window' : null,
+				action: () => { chrome.sessions.restore(item.sessionId); refreshClosed(); return false; }
+			}));
+		}
+		// 'top', 'recent', 'devices' don't need hydration
+		return data;
 	}
 };
 
@@ -1025,15 +1069,14 @@ async function openLinks(node) {
 }
 
 // opens given node
-async function openLink(node, newtab) {
+function openLink(node, newtab) {
     const { url } = node;
     if (!url) return;
 
-    const tab = await chrome.tabs.getCurrent();
     if (newtab) {
-        chrome.tabs.create({ url, active: newtab === 1, openerTabId: tab.id });
+        window.open(url, '_blank');
     } else {
-        chrome.tabs.update(tab.id, { url });
+        window.location.href = url;
     }
 }
 
@@ -1216,39 +1259,6 @@ function addRow(id, xpos, ypos) {
 function removeRow(xpos, ypos) {
     columns[xpos].splice(ypos, 1);
     saveColumns();
-}
-
-// get recently closed tabs
-async function getClosed() {
-    const maxResults = getConfig('number_closed');
-    const sessions = await chrome.sessions.getRecentlyClosed({ maxResults });
-    return sessions.slice(0, maxResults).map(session => {
-        if (session.window?.tabs.length === 1) {
-            session.tab = session.window.tabs[0];
-        }
-        const sessionId = session.window ? session.window.sessionId : session.tab.sessionId;
-        return {
-            title: session.tab ? session.tab.title : `${session.window.tabs.length} Tabs`,
-            url: session.tab?.url ?? null,
-            className: session.window ? 'window' : null,
-            action: () => { chrome.sessions.restore(sessionId); refreshClosed(); return false; }
-        };
-    });
-}
-
-async function getDevices() {
-    const devices = await chrome.sessions.getDevices({ maxResults: getConfig('number_closed') });
-    return devices.map(device => {
-        const children = device.sessions.flatMap(session => {
-            const tabs = session.window ? session.window.tabs : [session.tab];
-            return tabs.map(tab => ({ title: tab.title, url: tab.url }));
-        });
-        return {
-            id: `device.${device.deviceName}`,
-            title: device.deviceName,
-            children
-        };
-    });
 }
 
 // refresh recently closed tab lists
@@ -1671,9 +1681,6 @@ window.onresize = updateTooltips;
 // load options panel
 document.getElementById('options_button').onclick = () => { showOptions(true); return false; };
 if (location.search === '?options') showOptions(true);
-
-// refresh recently closed
-if (chrome.sessions) chrome.sessions.onChanged.addListener(refreshClosed);
 
 // Export for testing
 if (typeof module !== 'undefined' && module.exports) {

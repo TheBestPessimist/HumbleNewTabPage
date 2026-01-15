@@ -177,10 +177,17 @@ const mockBookmarkCache = {
     getCacheStatus: jest.fn().mockResolvedValue({ valid: true, lastSync: Date.now(), version: 1 }),
     put: jest.fn().mockResolvedValue(),
     get: jest.fn().mockResolvedValue(),
-    clear: jest.fn().mockResolvedValue()
+    clear: jest.fn().mockResolvedValue(),
+    // Special folder caching methods
+    getSpecialFolder: jest.fn().mockResolvedValue(null), // Return null to trigger fresh fetch
+    setSpecialFolder: jest.fn().mockResolvedValue(),
+    loadAllData: jest.fn().mockResolvedValue(new Map())
 };
 
 jest.mock('../bookmark-cache.js', () => mockBookmarkCache);
+
+// Also set as global since newtab.js uses it as a global (loaded via script tag in browser)
+global.BookmarkCache = mockBookmarkCache;
 
 describe('newtab.js', () => {
     beforeEach(async () => {
@@ -192,6 +199,8 @@ describe('newtab.js', () => {
         // Reset mock call counts
         mockBookmarkCache.getFolder.mockClear();
         mockBookmarkCache.getFolders.mockClear();
+        mockBookmarkCache.getSpecialFolder.mockClear();
+        mockBookmarkCache.setSpecialFolder.mockClear();
 
         // Clear newtab.js cache
         delete require.cache[require.resolve('../newtab.js')];
@@ -238,30 +247,40 @@ describe('newtab.js', () => {
             expect(folderB.children).toBe(true);
         });
 
-        test('fetches special folder data from Chrome APIs', async () => {
-            const { getChildren_internal } = require('../newtab.js');
-
+        test('fetches special folder data from cache (not Chrome APIs)', async () => {
+            // Special folders (except 'top') now read from cache only, no API fallback
             const mockRecent = [
                 { id: 'r1', title: 'Recent 1', url: 'https://recent1.com' },
                 { id: 'r2', title: 'Recent 2', url: 'https://recent2.com' }
             ];
-            global.chrome.bookmarks.getRecent = () => Promise.resolve(mockRecent);
 
+            // Set up cache to return data
+            mockBookmarkCache.getSpecialFolder.mockResolvedValue({
+                data: mockRecent,
+                fresh: true
+            });
+
+            const { getChildren_internal } = require('../newtab.js');
             const result = await getChildren_internal('recent');
 
             expect(result).toHaveLength(2);
             expect(result[0].title).toBe('Recent 1');
+            expect(mockBookmarkCache.getSpecialFolder).toHaveBeenCalledWith('recent');
         });
 
-        test('fetches top sites from Chrome APIs', async () => {
-            const { getChildren_internal } = require('../newtab.js');
-
+        test('fetches top sites from Chrome APIs (only special folder that uses API)', async () => {
+            // 'top' is the only special folder that fetches from Chrome API
+            // because service worker can't access chrome.topSites
             const mockTopSites = [
                 { title: 'Site 1', url: 'https://site1.com' },
                 { title: 'Site 2', url: 'https://site2.com' }
             ];
             global.chrome.topSites = { get: () => Promise.resolve(mockTopSites) };
 
+            // Cache miss - return null so it fetches from API
+            mockBookmarkCache.getSpecialFolder.mockResolvedValue(null);
+
+            const { getChildren_internal } = require('../newtab.js');
             const result = await getChildren_internal('top');
 
             expect(result).toHaveLength(2);
