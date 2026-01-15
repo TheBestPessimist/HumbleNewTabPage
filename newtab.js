@@ -1435,7 +1435,9 @@ let theme = {};
 function getConfig(key) {
     const value = localStorage.getItem(`options.${key}`);
     if (value != null) {
-        return typeof config[key] === 'number' ? Number(value) : value;
+        // Dynamic show_* keys (e.g., show_2, show_4) are numbers but not in config
+        const isNumber = typeof config[key] === 'number' || (key.startsWith('show_') && !(key in config));
+        return isNumber ? Number(value) : value;
     }
     return key in theme ? theme[key] : config[key];
 }
