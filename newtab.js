@@ -267,9 +267,19 @@ const getBookmarkNodes = ids =>
 	Perf.trackApi(`chrome.bookmarks.get(${ids.length} ids)`, () =>
 		chrome.bookmarks.get(ids).then(r => r || []));
 
-const getBookmarkChildren = id =>
-	Perf.trackApi(`chrome.bookmarks.getChildren(${id})`, () =>
-		chrome.bookmarks.getChildren(id).then(r => r || []));
+const getBookmarkChildren = async id => {
+	const start = performance.now();
+	const result = await chrome.bookmarks.getChildren(id).then(r => r || []);
+	const duration = performance.now() - start;
+	// Get folder name from cache or result's parent
+	const folderName = prefetchedData.nodes[id]?.title || `id:${id}`;
+	const apiName = `chrome.bookmarks.getChildren(${id}); folder: "${folderName}"; children: ${result.length}`;
+	Perf.apiCalls.count++;
+	Perf.apiCalls.totalTime += duration;
+	Perf.apiCalls.calls.push({ api: apiName, duration });
+	if (Perf.enabled) console.log(`[PERF:API] ${apiName}: ${duration.toFixed(2)}ms`);
+	return result;
+};
 
 // FAST: Get only root folder IDs (Bookmarks Bar, Other Bookmarks, Mobile Bookmarks)
 // Uses getChildren("0") which is much faster than getTree()
