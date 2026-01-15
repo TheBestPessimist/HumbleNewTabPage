@@ -473,9 +473,14 @@ function render(node, target) {
         if (shouldBeOpen) {
             setClass(a, node, true);
             a.open = true;
-            // ALWAYS defer subfolder rendering - even if data is cached
-            // This allows browser to paint folder headers immediately
-            if (a.dataset) a.dataset.deferred = 'true';
+            // If children are already loaded as an array, render them immediately
+            // (e.g., device subfolders from "Other devices" have inline children)
+            if (Array.isArray(node.children)) {
+                renderAll(node.children, li);
+            } else if (a.dataset) {
+                // Defer loading for folders that need to fetch children
+                a.dataset.deferred = 'true';
+            }
         }
         addFolderHandlers(node, a);
         enableDragFolder(node, a);
