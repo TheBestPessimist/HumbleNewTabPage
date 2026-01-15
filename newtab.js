@@ -11,6 +11,7 @@ const Perf = {
     operations: [], // Detailed operation log
     enabled: true,
     apiCalls: { count: 0, totalTime: 0, calls: [] },
+    cacheCalls: { count: 0, totalTime: 0, calls: [] },
     firstPaintTime: null,
     reportPrinted: false,
 
@@ -81,6 +82,7 @@ const Perf = {
         // Summary stats
         console.log('\n📊 SUMMARY:');
         console.log(`  Total time to first paint: ${this.firstPaintTime?.toFixed(2) || totalTime.toFixed(2)}ms`);
+        console.log(`  IndexedDB cache calls: ${this.cacheCalls.count} calls, ${this.cacheCalls.totalTime.toFixed(2)}ms total`);
         console.log(`  Chrome API calls: ${this.apiCalls.count} calls, ${this.apiCalls.totalTime.toFixed(2)}ms total`);
         if (navTiming) {
             console.log(`  DOM Content Loaded: ${navTiming.domContentLoadedEventEnd.toFixed(2)}ms`);
@@ -127,9 +129,19 @@ const Perf = {
             });
         }
 
+        // IndexedDB cache breakdown
+        if (this.cacheCalls.calls.length > 0) {
+            console.log('\n💾 INDEXEDDB CACHE CALLS:');
+            const sorted = [...this.cacheCalls.calls].sort((a,b) => b.duration - a.duration);
+            sorted.forEach(c => {
+                const bar = '█'.repeat(Math.min(Math.ceil(c.duration / 10), 50));
+                console.log(`  ${c.duration.toFixed(1).padStart(7)}ms | ${bar} | ${c.api}`);
+            });
+        }
+
         // Chrome API breakdown
         if (this.apiCalls.calls.length > 0) {
-            console.log('\n🔌 CHROME API CALLS:');
+            console.log('\n🔌 CHROME API CALLS (special folders only, after first paint):');
             const sorted = [...this.apiCalls.calls].sort((a,b) => b.duration - a.duration);
             sorted.forEach(c => {
                 const bar = '█'.repeat(Math.min(Math.ceil(c.duration / 10), 50));
@@ -153,8 +165,11 @@ const Perf = {
             console.log(`     Note: Extension pages have inherent overhead (~50-150ms)`);
         }
 
+        if (this.cacheCalls.totalTime > 100) {
+            console.log(`  ⚠️  IndexedDB cache taking ${this.cacheCalls.totalTime.toFixed(0)}ms`);
+        }
         if (this.apiCalls.totalTime > 100) {
-            console.log(`  ⚠️  Chrome APIs taking ${this.apiCalls.totalTime.toFixed(0)}ms - this is likely the bottleneck`);
+            console.log(`  ⚠️  Chrome APIs taking ${this.apiCalls.totalTime.toFixed(0)}ms`);
         }
         const renderOps = this.operations.filter(o => o.label.includes('render'));
         const renderTime = renderOps.reduce((sum, o) => sum + o.duration, 0);
@@ -290,9 +305,9 @@ async function getFolderFromCache(id) {
 		const folder = await BookmarkCache.getFolder(id);
 		const duration = performance.now() - start;
 		const children = folder?.children || [];
-		Perf.apiCalls.count++;
-		Perf.apiCalls.totalTime += duration;
-		Perf.apiCalls.calls.push({ api: `cache.getFolder(${id})`, duration });
+		Perf.cacheCalls.count++;
+		Perf.cacheCalls.totalTime += duration;
+		Perf.cacheCalls.calls.push({ api: `cache.getFolder(${id})`, duration });
 		if (Perf.enabled) console.log(`[PERF:CACHE] getFolder(${id}): ${children.length} children in ${duration.toFixed(2)}ms`);
 		return children;
 	} catch (e) {
@@ -312,9 +327,9 @@ async function getFoldersFromCache(ids) {
 	try {
 		const folders = await BookmarkCache.getFolders(ids);
 		const duration = performance.now() - start;
-		Perf.apiCalls.count++;
-		Perf.apiCalls.totalTime += duration;
-		Perf.apiCalls.calls.push({ api: `cache.getFolders(${ids.length} ids)`, duration });
+		Perf.cacheCalls.count++;
+		Perf.cacheCalls.totalTime += duration;
+		Perf.cacheCalls.calls.push({ api: `cache.getFolders(${ids.length} ids)`, duration });
 		if (Perf.enabled) console.log(`[PERF:CACHE] getFolders(${ids.length} ids): ${duration.toFixed(2)}ms`);
 		return folders;
 	} catch (e) {
@@ -472,11 +487,11 @@ async function prefetchFolderMetadata() {
 }
 
 // Load children for all visible folders AFTER first paint (progressive loading)
+// NOTE: This only loads from IndexedDB cache - NO Chrome API calls
 async function loadChildrenProgressively() {
 	Perf.mark('loadChildrenProgressively start');
 	const columnIds = columns?.flat() || [];
 	const bookmarkIds = columnIds.filter(id => !special.includes(id));
-	const visibleSpecialFolders = columnIds.filter(id => specialFolderIds.includes(id));
 
 	// Collect IDs of deferred open folders (these need their children prefetched too)
 	const deferredFolderIds = [...document.querySelectorAll('#main a.folder[data-deferred="true"]')]
@@ -489,8 +504,8 @@ async function loadChildrenProgressively() {
 	// Load all folders in a single batch (one IndexedDB transaction)
 	await prefetchFolderChildrenBatch(allIds);
 
-	// Also load special folders that are open
-	await Promise.all(visibleSpecialFolders.map(id => prefetchSpecialFolder(id)));
+	// Special folders (Most Visited, Recent Bookmarks) are loaded lazily on-demand
+	// when the user clicks to expand them - no Chrome API calls during load
 
 	Perf.mark('loadChildrenProgressively end');
 }
@@ -573,7 +588,10 @@ function render(node, target) {
 
 // render an array of bookmark nodes
 function renderAll(nodes, target, toplevel) {
+    // Use DocumentFragment for batch DOM operations (faster than direct appends)
+    const fragment = document.createDocumentFragment();
     const ul = document.createElement('ul');
+
     nodes.forEach(node => {
         // skip extensions and duplicated child folders
         if (toplevel || !coords[node.id]) render(node, ul);
@@ -582,12 +600,14 @@ function renderAll(nodes, target, toplevel) {
         render({ id: 'empty', title: '< Empty >' }, ul);
     }
     if (toplevel) {
-        target.appendChild(ul);
+        fragment.appendChild(ul);
+        target.appendChild(fragment);
     } else {
         // wrap child ul for animation
         const wrap = document.createElement('div');
         wrap.appendChild(ul);
-        target.appendChild(wrap);
+        fragment.appendChild(wrap);
+        target.appendChild(fragment);
     }
     updateTooltips();
     return ul;
@@ -645,75 +665,156 @@ async function renderColumns() {
 
 // Expand folders that were deferred during initial render (runs after first paint)
 async function expandDeferredFolders() {
+    console.log('[expandDeferredFolders] Starting at', performance.now().toFixed(2));
+
+    // Separate special folders from regular bookmarks
+    // Special folders use slow Chrome APIs - don't let them block regular bookmarks
+    const isSpecialFolder = (id) => special.includes(id) || specialFolderIds.includes(id) || SpecialFolders.isFolder(id);
+
+    // Helper to yield to browser for repaint
+    const yieldToBrowser = () => new Promise(resolve => setTimeout(resolve, 0));
+
+    // Collect all special folders to expand later
+    const pendingSpecialFolders = [];
+
     // Handle auto-expand folders (show_root=false case where we rendered folder header temporarily)
     const autoExpandLinks = [...document.querySelectorAll('#main a.folder[data-auto-expand="true"]')];
     if (autoExpandLinks.length > 0) {
         Perf.mark(`Auto-expanding ${autoExpandLinks.length} folders`);
-        // Batch prefetch all auto-expand folder children first
-        const autoExpandIds = autoExpandLinks
-            .map(a => a.parentNode?.dataset?.nodeId)
-            .filter(id => id && !special.includes(id) && !specialFolderIds.includes(id));
-        await prefetchFolderChildrenBatch(autoExpandIds);
 
-        await Promise.all(autoExpandLinks.map(async (a) => {
+        // Separate regular and special folders
+        const regularAutoExpand = [];
+        for (const a of autoExpandLinks) {
+            const nodeId = a.parentNode?.dataset?.nodeId;
+            if (!nodeId) continue;
+            if (isSpecialFolder(nodeId)) {
+                pendingSpecialFolders.push({ a, type: 'auto-expand' });
+            } else {
+                regularAutoExpand.push(a);
+            }
+        }
+
+        // Batch prefetch regular folder children first
+        const regularIds = regularAutoExpand.map(a => a.parentNode?.dataset?.nodeId).filter(Boolean);
+        await prefetchFolderChildrenBatch(regularIds);
+
+        // Expand regular folders immediately (synchronously for speed)
+        for (const a of regularAutoExpand) {
             const li = a.parentNode;
             const nodeId = li?.dataset?.nodeId;
-            if (!nodeId) return;
+            if (!nodeId) continue;
 
             delete a.dataset.autoExpand;
             const folderName = a.textContent || nodeId;
             const children = await getChildren({ id: nodeId, children: true }, folderName);
-            // Replace the folder header with its children directly in the column
             const column = li.closest('.column');
             const ul = li.parentNode;
             if (column && ul) {
-                // Remove the folder header li
                 li.remove();
-                // Add children to the ul
                 children.forEach(child => {
                     if (!coords[child.id]) render(child, ul);
                 });
                 if (ul.childNodes.length === 0) {
                     render({ id: 'empty', title: '< Empty >' }, ul);
                 }
-                updateTooltips();
             }
-        }));
+        }
+        updateTooltips();
     }
 
     // Handle deferred open folders (folders that were open but children weren't rendered yet)
-    // Loop until no more deferred folders exist (rendering children may create new deferred folders)
     let totalDeferred = 0;
     let deferredLinks;
     while ((deferredLinks = [...document.querySelectorAll('#main a.folder[data-deferred="true"]')]).length > 0) {
-        totalDeferred += deferredLinks.length;
-
-        // Batch prefetch all deferred folder children first (single IndexedDB transaction)
-        const deferredIds = deferredLinks
-            .map(a => a.parentNode?.dataset?.nodeId)
-            .filter(id => id && !special.includes(id) && !specialFolderIds.includes(id));
-        await prefetchFolderChildrenBatch(deferredIds);
-
-        // Now expand all deferred folders (children are already in memory)
+        // Separate regular and special folders
+        const regularDeferred = [];
         for (const a of deferredLinks) {
+            const nodeId = a.parentNode?.dataset?.nodeId;
+            if (!nodeId) continue;
+            if (isSpecialFolder(nodeId)) {
+                pendingSpecialFolders.push({ a, type: 'deferred' });
+                delete a.dataset.deferred;
+            } else {
+                regularDeferred.push(a);
+            }
+        }
+
+        totalDeferred += regularDeferred.length;
+        console.log('[expandDeferredFolders] Processing', regularDeferred.length, 'regular +', pendingSpecialFolders.length, 'special at', performance.now().toFixed(2));
+
+        // Batch prefetch regular folder children first
+        const regularIds = regularDeferred.map(a => a.parentNode?.dataset?.nodeId).filter(Boolean);
+        console.log('[expandDeferredFolders] Prefetching', regularIds.length, 'folder IDs');
+        await prefetchFolderChildrenBatch(regularIds);
+        console.log('[expandDeferredFolders] Prefetch complete at', performance.now().toFixed(2));
+
+        // Fetch all children in parallel (should be instant cache hits)
+        console.log('[expandDeferredFolders] Fetching children for', regularDeferred.length, 'folders in parallel at', performance.now().toFixed(2));
+        const folderData = await Promise.all(regularDeferred.map(async (a) => {
             const li = a.parentNode;
             const nodeId = li?.dataset?.nodeId;
-
-            if (!nodeId || !a.open || a.nextSibling) continue;
-
-            delete a.dataset.deferred;
+            if (!nodeId || !a.open || a.nextSibling) return null;
             const folderName = a.textContent || nodeId;
             const children = await getChildren({ id: nodeId, children: true }, folderName);
+            return { a, li, nodeId, children };
+        }));
+        console.log('[expandDeferredFolders] All children fetched at', performance.now().toFixed(2));
+
+        // Render all folders
+        console.log('[expandDeferredFolders] Rendering', folderData.filter(d => d !== null).length, 'folders');
+        for (const data of folderData) {
+            if (!data) continue;
+            const { a, li, nodeId, children } = data;
+            delete a.dataset.deferred;
             if (!a.nextSibling && a.open) {
                 renderAll(children, li);
             }
         }
+        console.log('[expandDeferredFolders] All folders rendered at', performance.now().toFixed(2));
     }
 
     if (totalDeferred > 0) {
         Perf.mark(`Expanded ${totalDeferred} deferred folders`);
     }
     Perf.mark('Finished loading');
+
+    // Yield to browser to paint regular folders BEFORE starting slow Chrome API calls
+    await yieldToBrowser();
+
+    // NOW expand special folders (slow Chrome APIs) - after regular folders are painted
+    if (pendingSpecialFolders.length > 0) {
+        Perf.mark(`Loading ${pendingSpecialFolders.length} special folders in background`);
+        for (const { a, type } of pendingSpecialFolders) {
+            const li = a.parentNode;
+            const nodeId = li?.dataset?.nodeId;
+            if (!nodeId) continue;
+
+            if (type === 'auto-expand') {
+                delete a.dataset.autoExpand;
+            }
+
+            const folderName = a.textContent || nodeId;
+            // Fire and forget - don't block
+            getChildren({ id: nodeId, children: true }, folderName).then(children => {
+                if (type === 'auto-expand') {
+                    const column = li.closest('.column');
+                    const ul = li.parentNode;
+                    if (column && ul) {
+                        li.remove();
+                        children.forEach(child => {
+                            if (!coords[child.id]) render(child, ul);
+                        });
+                        if (ul.childNodes.length === 0) {
+                            render({ id: 'empty', title: '< Empty >' }, ul);
+                        }
+                        updateTooltips();
+                    }
+                } else if (!a.nextSibling && a.open) {
+                    renderAll(children, li);
+                }
+            });
+        }
+    }
 }
 
 // enables click and context menu for given folder
@@ -1258,6 +1359,16 @@ async function loadColumns() {
 
     Perf.mark('loadColumns: cache valid');
 
+    // Load ALL data into memory cache FIRST (single IndexedDB read)
+    // This is faster than multiple individual reads and makes subsequent calls instant
+    Perf.mark('loadAllData start');
+    try {
+        await BookmarkCache.loadAllData();
+    } catch (e) {
+        console.error('[BookmarkCache] loadAllData failed:', e);
+    }
+    Perf.mark('loadAllData end');
+
     columns = [];
     forEachColumnEntry((x, y, id) => {
         if (!columns[x]) columns[x] = [];
@@ -1266,12 +1377,12 @@ async function loadColumns() {
 
     if (root) {
         verifyColumns();
-        // FAST: Load folder metadata from cache
+        // FAST: Load folder metadata from cache (now uses in-memory cache)
         await prefetchFolderMetadata();
         await renderColumns();
     } else {
         Perf.mark('loadColumns: fetching root IDs + metadata from cache');
-        // Load root folder IDs and metadata from cache
+        // Load root folder IDs and metadata from cache (now uses in-memory cache)
         const [rootIds] = await Promise.all([
             getRootFolderIds(),
             prefetchFolderMetadata()
@@ -1287,13 +1398,13 @@ async function loadColumns() {
     if (typeof requestAnimationFrame !== 'undefined') {
         Perf.waitForPaintAndReport();
 
-        // After first paint, load children progressively
+        // After first paint, load children data (uses in-memory cache - instant)
         requestAnimationFrame(() => {
-            requestAnimationFrame(() => {
-                // Load children data in background, then expand folders
-                loadChildrenProgressively().then(() => {
-                    expandDeferredFolders();
-                });
+            requestAnimationFrame(async () => {
+                await loadChildrenProgressively();
+                Perf.mark('expandDeferredFolders starting');
+                await expandDeferredFolders();
+                Perf.mark('expandDeferredFolders complete');
             });
         });
     } else {
