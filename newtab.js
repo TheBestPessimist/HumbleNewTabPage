@@ -1019,10 +1019,6 @@ async function toggle(node, a) {
             const result = await getChildren(node);
             if (!a.nextSibling && a.open) {
                 renderAll(result, a.parentNode);
-                // Activate favicons for newly rendered bookmarks
-                if (typeof FaviconCache !== 'undefined') {
-                    FaviconCache.activateFavicons();
-                }
                 animate(node, a, isopen);
             }
         }
@@ -1155,13 +1151,9 @@ async function loadColumns() {
     if (typeof requestAnimationFrame !== 'undefined') {
         Perf.waitForPaintAndReport();
 
-        // After first paint, activate favicons and load children progressively
+        // After first paint, load children progressively
         requestAnimationFrame(() => {
             requestAnimationFrame(() => {
-                // Start loading favicons now that bookmarks are painted
-                if (typeof FaviconCache !== 'undefined') {
-                    FaviconCache.activateFavicons();
-                }
                 // Load children data in background, then expand folders
                 loadChildrenProgressively().then(() => {
                     expandDeferredFolders();
