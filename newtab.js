@@ -45,7 +45,6 @@ const Perf = {
         const result = await fn();
         const duration = performance.now() - start;
         this.operations.push({ label, duration, timestamp: start - this.startTime });
-        console.log(`[PERF:OP] ${label}: ${duration.toFixed(2)}ms`);
         return result;
     },
 
@@ -198,8 +197,6 @@ const Perf = {
 
 // Record when we started relative to page navigation
 if (performance.getEntriesByType('navigation').length > 0) {
-    const nav = performance.getEntriesByType('navigation')[0];
-    console.log(`[PERF] Page navigation started at: 0ms`);
     console.log(`[PERF] Script started at: ${Perf.startTime.toFixed(2)}ms after navigation`);
 }
 
@@ -308,7 +305,6 @@ async function getFolderFromCache(id) {
 		Perf.cacheCalls.count++;
 		Perf.cacheCalls.totalTime += duration;
 		Perf.cacheCalls.calls.push({ api: `cache.getFolder(${id})`, duration });
-		if (Perf.enabled) console.log(`[PERF:CACHE] getFolder(${id}): ${children.length} children in ${duration.toFixed(2)}ms`);
 		return children;
 	} catch (e) {
 		console.error(`[BookmarkCache] Error loading folder ${id}:`, e);
@@ -330,7 +326,6 @@ async function getFoldersFromCache(ids) {
 		Perf.cacheCalls.count++;
 		Perf.cacheCalls.totalTime += duration;
 		Perf.cacheCalls.calls.push({ api: `cache.getFolders(${ids.length} ids)`, duration });
-		if (Perf.enabled) console.log(`[PERF:CACHE] getFolders(${ids.length} ids): ${duration.toFixed(2)}ms`);
 		return folders;
 	} catch (e) {
 		console.error(`[BookmarkCache] Error loading folders:`, e);
