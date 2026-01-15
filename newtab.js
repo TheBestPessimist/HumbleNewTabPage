@@ -203,13 +203,12 @@ if (performance.getEntriesByType('navigation').length > 0) {
 Perf.mark('Script start');
 
 // =============================================================================
-// SPECIAL FOLDERS - Unified handling for apps, top sites, recent, closed, devices
+// SPECIAL FOLDERS - Unified handling for top sites, recent, closed, devices
 // =============================================================================
 
 const SpecialFolders = {
 	// Definition of all special folders with their properties
 	defs: {
-		apps:    { title: 'Apps',             isFolder: false, url: 'chrome://apps' },
 		top:     { title: 'Most visited',     isFolder: true,  configKey: 'number_top' },
 		recent:  { title: 'Recent bookmarks', isFolder: true,  configKey: 'number_recent' },
 		closed:  { title: 'Recently closed',  isFolder: true,  configKey: 'number_closed' },
@@ -217,9 +216,9 @@ const SpecialFolders = {
 	},
 
 	// All special IDs (for iteration)
-	all: ['apps', 'top', 'recent', 'closed', 'devices'],
+	all: ['top', 'recent', 'closed', 'devices'],
 
-	// Check if an ID is a special folder (not apps, which is a link)
+	// Check if an ID is a special folder
 	isFolder(id) {
 		return this.defs[id]?.isFolder;
 	},
@@ -512,8 +511,6 @@ function render(node, target) {
             }
         }
         addFolderHandlers(node, a);
-        enableDragFolder(node, a);
-    } else if (node.id === 'apps') {
         enableDragFolder(node, a);
     }
 
@@ -1311,7 +1308,6 @@ const config = {
     hide_options: 0,
     lock: 0,
     show_top: 1,
-    show_apps: 1,
     show_recent: 1,
     show_closed: 1,
     show_devices: 1,
