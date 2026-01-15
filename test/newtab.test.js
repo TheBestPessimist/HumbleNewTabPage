@@ -211,112 +211,50 @@ describe('newtab.js', () => {
         });
     });
 
-    describe('getCachedChildren', () => {
+    describe('getChildren_internal', () => {
         // Note: These tests are skipped because they require complex mocking of the
         // BookmarkCache module. The functionality is tested via bookmark-cache.test.js
         // and integration testing in the browser.
         test.skip('fetches children from cache on demand', async () => {
-            const { getCachedChildren, clearPrefetchCache } = require('../newtab.js');
-            clearPrefetchCache();
+            const { getChildren_internal } = require('../newtab.js');
 
-            const children = await getCachedChildren('1');
+            const children = await getChildren_internal('1');
 
             expect(children).toHaveLength(3);
-            // Now uses IndexedDB cache, not chrome.bookmarks.getChildren
             expect(children.map(c => c.id)).toEqual(['10', '11', '12']);
         });
 
         test.skip('marks folders with isFolder=true', async () => {
-            const { getCachedChildren, clearPrefetchCache } = require('../newtab.js');
-            clearPrefetchCache();
+            const { getChildren_internal } = require('../newtab.js');
 
-            const children = await getCachedChildren('1');
+            const children = await getChildren_internal('1');
 
             const folderA = children.find(c => c.id === '10');
             const site1 = children.find(c => c.id === '11');
             const folderB = children.find(c => c.id === '12');
 
-            // Now uses isFolder flag from cache instead of children=true
-            expect(folderA.isFolder).toBe(true);
-            expect(site1.isFolder).toBeUndefined();
-            expect(folderB.isFolder).toBe(true);
+            expect(folderA.children).toBe(true);
+            expect(site1.children).toBeUndefined();
+            expect(folderB.children).toBe(true);
         });
 
-        test.skip('caches results in memory and reuses them', async () => {
-            const { getCachedChildren, clearPrefetchCache, getPrefetchedData } = require('../newtab.js');
-            clearPrefetchCache();
+        test('fetches special folder data from Chrome APIs', async () => {
+            const { getChildren_internal } = require('../newtab.js');
 
-            // First call should populate in-memory cache
-            await getCachedChildren('1');
-            const cache = getPrefetchedData();
-            expect(cache.children['1']).toBeDefined();
-            expect(cache.children['1']).toHaveLength(3);
-
-            // Second call should use in-memory cache
-            const children2 = await getCachedChildren('1');
-            expect(children2).toHaveLength(3);
-        });
-
-        test('uses preloaded special folder data', async () => {
-            const { getCachedChildren, clearPrefetchCache, getPrefetchedData } = require('../newtab.js');
-            clearPrefetchCache();
-
-            const cache = getPrefetchedData();
-            cache.children['recent'] = [
+            const mockRecent = [
                 { id: 'r1', title: 'Recent 1', url: 'https://recent1.com' },
                 { id: 'r2', title: 'Recent 2', url: 'https://recent2.com' }
             ];
-
-            let fetchCalled = false;
-            global.chrome.bookmarks.getRecent = () => {
-                fetchCalled = true;
-                return Promise.resolve([]);
-            };
-
-            const result = await getCachedChildren('recent');
-
-            expect(fetchCalled).toBe(false);
-            expect(result).toHaveLength(2);
-            expect(cache.children['recent']).toBeUndefined(); // Consumed
-        });
-    });
-
-    describe('prefetchSpecialFolder', () => {
-        test('caches data when folder is open', async () => {
-            const { prefetchSpecialFolder, clearPrefetchCache, getPrefetchedData } = require('../newtab.js');
-            clearPrefetchCache();
-            localStorage.setItem('open.recent', 'true');
-
-            const mockRecent = [{ id: 'r1', title: 'Recent 1', url: 'https://r1.com' }];
             global.chrome.bookmarks.getRecent = () => Promise.resolve(mockRecent);
 
-            await prefetchSpecialFolder('recent');
+            const result = await getChildren_internal('recent');
 
-            const cache = getPrefetchedData();
-            expect(cache.children['recent']).toBeDefined();
+            expect(result).toHaveLength(2);
+            expect(result[0].title).toBe('Recent 1');
         });
 
-        test('skips when folder is closed', async () => {
-            const { prefetchSpecialFolder, clearPrefetchCache, getPrefetchedData } = require('../newtab.js');
-            clearPrefetchCache();
-            // Don't set open.recent
-
-            let apiCalled = false;
-            global.chrome.bookmarks.getRecent = () => {
-                apiCalled = true;
-                return Promise.resolve([]);
-            };
-
-            await prefetchSpecialFolder('recent');
-
-            expect(apiCalled).toBe(false);
-            expect(getPrefetchedData().children['recent']).toBeUndefined();
-        });
-
-        test('handles top sites', async () => {
-            const { prefetchSpecialFolder, clearPrefetchCache, getPrefetchedData } = require('../newtab.js');
-            clearPrefetchCache();
-            localStorage.setItem('open.top', 'true');
+        test('fetches top sites from Chrome APIs', async () => {
+            const { getChildren_internal } = require('../newtab.js');
 
             const mockTopSites = [
                 { title: 'Site 1', url: 'https://site1.com' },
@@ -324,24 +262,23 @@ describe('newtab.js', () => {
             ];
             global.chrome.topSites = { get: () => Promise.resolve(mockTopSites) };
 
-            await prefetchSpecialFolder('top');
+            const result = await getChildren_internal('top');
 
-            const cache = getPrefetchedData();
-            expect(cache.children['top']).toHaveLength(2);
+            expect(result).toHaveLength(2);
+            expect(result[0].title).toBe('Site 1');
         });
     });
 
     describe('expandDeferredFolders', () => {
-        // Note: This test is skipped because it requires complex mocking of the
-        // BookmarkCache module. The functionality is tested via integration testing
-        // in the browser.
-        test.skip('expands nested deferred folders', async () => {
+        // Note: expandDeferredFolders now only handles special folders (top, recent, closed, devices)
+        // which require slow Chrome API calls. Regular bookmarks are loaded immediately from
+        // BookmarkCache's in-memory cache.
+        test.skip('expands deferred special folders', async () => {
             localStorage.setItem('options.remember_open', '1');
-            localStorage.setItem('open.10', 'true');
-            localStorage.setItem('open.102', 'true');
-            localStorage.setItem('column.0.0', '1');
+            localStorage.setItem('open.recent', 'true');
+            localStorage.setItem('column.0.0', 'recent');
 
-            const { expandDeferredFolders, getCachedChildren, clearPrefetchCache, render, renderAll } = require('../newtab.js');
+            const { expandDeferredFolders, render } = require('../newtab.js');
             await new Promise(r => setTimeout(r, 50));
 
             const main = document.getElementById('main');
@@ -352,12 +289,10 @@ describe('newtab.js', () => {
             column.appendChild(ul);
             main.appendChild(column);
 
-            clearPrefetchCache();
-            await getCachedChildren('10');
-            await getCachedChildren('102');
+            const mockRecent = [{ id: 'r1', title: 'Recent 1', url: 'https://r1.com' }];
+            global.chrome.bookmarks.getRecent = () => Promise.resolve(mockRecent);
 
-            // Use children: true to indicate it's a folder (render function checks node.children)
-            render({ id: '10', title: 'Folder A', children: true }, ul);
+            render({ id: 'recent', title: 'Recent bookmarks', children: true }, ul);
 
             const deferredBefore = document.querySelectorAll('#main a.folder[data-deferred="true"]');
             expect(deferredBefore).toHaveLength(1);
@@ -366,10 +301,6 @@ describe('newtab.js', () => {
 
             const deferredAfter = document.querySelectorAll('#main a.folder[data-deferred="true"]');
             expect(deferredAfter).toHaveLength(0);
-
-            const allLinks = [...document.querySelectorAll('#main a')];
-            const deepBookmark = allLinks.find(a => a.href === 'https://deep1.com/');
-            expect(deepBookmark).toBeDefined();
         });
     });
 });

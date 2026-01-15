@@ -349,12 +349,6 @@ async function getRootFolderIds() {
 	return folder.children.filter(c => c.isFolder).map(c => c.id);
 }
 
-// Cache for prefetched bookmark data (in-memory cache for current session)
-const prefetchedData = {
-	nodes: {},      // id -> node data
-	children: {}    // id -> array of child nodes
-};
-
 // Iterate over column storage entries, calling fn(x, y, id) for each
 // If fn returns false, stop iteration.
 function forEachColumnEntry(fn) {
@@ -373,141 +367,36 @@ function forEachColumnEntry(fn) {
 	}
 }
 
-// Get cached children or fetch if not available (works for both regular and special folders)
-async function getCachedChildren(id, folderName) {
-	// Use in-memory cache if available
-	if (id in prefetchedData.children) {
-		const result = prefetchedData.children[id];
-		// Special folders: consume cache (delete after use) so next open fetches fresh
-		if (SpecialFolders.isFolder(id)) {
-			delete prefetchedData.children[id];
-		}
-		return result;
-	}
-
-	// Fetch based on folder type (cache miss)
+// Get children for a folder (works for both regular and special folders)
+// Uses BookmarkCache's in-memory cache for regular bookmarks (fast after loadAllData)
+async function getChildren_internal(id) {
+	// Special folders use Chrome APIs (fetched fresh each time)
 	if (SpecialFolders.isFolder(id)) {
 		return SpecialFolders.fetchChildren(id);
 	}
 
-	// Load from IndexedDB cache
+	// Regular bookmarks: load from BookmarkCache (uses in-memory cache)
 	const children = await getFolderFromCache(id);
 	// Mark folders (items with isFolder flag)
 	children.forEach(child => {
 		if (child.isFolder) child.children = true;
 	});
-	prefetchedData.children[id] = children;
 	return children;
 }
 
-// Get cached node or fetch if not available
-async function getCachedNode(id) {
-	if (id in prefetchedData.nodes) {
-		return [prefetchedData.nodes[id]];
-	}
-	// Load folder metadata from IndexedDB cache
+// Get node metadata (uses BookmarkCache's in-memory cache)
+async function getNode_internal(id) {
 	const folder = await BookmarkCache.getFolder(id);
 	if (folder) {
-		const node = { id: folder.id, title: folder.title, parentId: folder.parentId };
-		prefetchedData.nodes[id] = node;
-		return [node];
+		return { id: folder.id, title: folder.title, parentId: folder.parentId };
 	}
-	return [];
-}
-
-// Prefetch ONLY the immediate children of a folder (no recursion for initial load)
-async function prefetchFolderChildren(id) {
-	// Skip if already in memory cache
-	if (id in prefetchedData.children) return;
-
-	const children = await getFolderFromCache(id);
-	// Mark folders (items with isFolder flag)
-	children.forEach(child => {
-		if (child.isFolder) child.children = true;
-	});
-	prefetchedData.children[id] = children;
-	// NOTE: No recursive prefetching - open subfolders load on-demand during render
-}
-
-// Batch prefetch multiple folders in a single IndexedDB transaction
-async function prefetchFolderChildrenBatch(ids) {
-	// Filter out IDs already in memory cache
-	const idsToFetch = ids.filter(id => !(id in prefetchedData.children));
-	if (idsToFetch.length === 0) return;
-
-	const folders = await getFoldersFromCache(idsToFetch);
-	for (const [id, folder] of folders) {
-		const children = folder?.children || [];
-		// Mark folders (items with isFolder flag)
-		children.forEach(child => {
-			if (child.isFolder) child.children = true;
-		});
-		prefetchedData.children[id] = children;
-	}
-	// Handle IDs that weren't found in cache (set empty array)
-	for (const id of idsToFetch) {
-		if (!(id in prefetchedData.children)) {
-			prefetchedData.children[id] = [];
-		}
-	}
-}
-
-// Prefetch special folder data if it's marked as open
-async function prefetchSpecialFolder(id) {
-	if (!localStorage.getItem(`open.${id}`)) return;
-	prefetchedData.children[id] = await SpecialFolders.fetchChildren(id);
+	return null;
 }
 
 // Helper to get config value (works before full config is loaded)
 function getConfigValue(key, defaultValue) {
 	const value = localStorage.getItem(`options.${key}`);
 	return value !== null ? Number(value) : defaultValue;
-}
-
-// Prefetch folder metadata from IndexedDB cache
-async function prefetchFolderMetadata() {
-	Perf.mark('prefetchFolderMetadata start');
-	const columnIds = columns?.flat() || [];
-	const bookmarkIds = columnIds.filter(id => !special.includes(id));
-
-	if (bookmarkIds.length > 0) {
-		// Load all folder metadata from cache in one batch
-		const folders = await getFoldersFromCache(bookmarkIds);
-		folders.forEach((folder, id) => {
-			if (folder) {
-				prefetchedData.nodes[id] = {
-					id: folder.id,
-					title: folder.title,
-					parentId: folder.parentId
-				};
-			}
-		});
-	}
-	Perf.mark('prefetchFolderMetadata end');
-}
-
-// Load children for all visible folders AFTER first paint (progressive loading)
-// NOTE: This only loads from IndexedDB cache - NO Chrome API calls
-async function loadChildrenProgressively() {
-	Perf.mark('loadChildrenProgressively start');
-	const columnIds = columns?.flat() || [];
-	const bookmarkIds = columnIds.filter(id => !special.includes(id));
-
-	// Collect IDs of deferred open folders (these need their children prefetched too)
-	const deferredFolderIds = [...document.querySelectorAll('#main a.folder[data-deferred="true"]')]
-		.map(a => a.parentNode?.dataset?.nodeId)
-		.filter(id => id && !special.includes(id) && !specialFolderIds.includes(id));
-
-	// Combine all IDs that need prefetching (deduplicated)
-	const allIds = [...new Set([...bookmarkIds, ...deferredFolderIds])];
-
-	// Load all folders in a single batch (one IndexedDB transaction)
-	await prefetchFolderChildrenBatch(allIds);
-
-	// Special folders (Most Visited, Recent Bookmarks) are loaded lazily on-demand
-	// when the user clicks to expand them - no Chrome API calls during load
-
-	Perf.mark('loadChildrenProgressively end');
 }
 
 // render a single bookmark node
@@ -568,12 +457,20 @@ function render(node, target) {
             setClass(a, node, true);
             a.open = true;
             // If children are already loaded as an array, render them immediately
-            // (e.g., device subfolders from "Other devices" have inline children)
             if (Array.isArray(node.children)) {
                 renderAll(node.children, li);
-            } else if (a.dataset) {
-                // Defer loading for folders that need to fetch children
+            } else if (SpecialFolders.isFolder(node.id)) {
+                // Special folders require slow Chrome API calls - defer loading
                 a.dataset.deferred = 'true';
+            } else {
+                // Regular bookmarks: fetch children from BookmarkCache (fast, in-memory)
+                // Use async IIFE to avoid blocking render
+                (async () => {
+                    const children = await getChildren_internal(node.id);
+                    if (a.open && !a.nextSibling) {
+                        renderAll(children, li);
+                    }
+                })();
             }
         }
         addFolderHandlers(node, a);
@@ -618,18 +515,9 @@ async function renderColumn(index, target) {
     return Perf.track(`renderColumn(${index})`, async () => {
         const ids = columns[index];
         if (ids.length === 1 && !getConfig('show_root')) {
-            // Check if children are already cached (fast path)
-            if (ids[0] in prefetchedData.children) {
-                const result = await getChildren({ id: ids[0] });
-                renderAll(result, target);
-            } else {
-                // Children not loaded yet - render folder as expandable, mark for deferred load
-                const results = await Promise.all(ids.map(id => getSubTree(id)));
-                const nodes = results.flat();
-                // Mark these folders for auto-expansion after children load
-                nodes.forEach(n => { if (n.children) n.autoExpand = true; });
-                renderAll(nodes, target, true);
-            }
+            // Single folder with show_root=false: render children directly
+            const result = await getChildren({ id: ids[0] });
+            renderAll(result, target);
             addColumnHandlers(index, target);
         } else if (ids.length > 0) {
             const results = await Promise.all(ids.map(id => getSubTree(id)));
@@ -663,156 +551,30 @@ async function renderColumns() {
     Perf.mark('renderColumns end (all columns rendered)');
 }
 
-// Expand folders that were deferred during initial render (runs after first paint)
+// Expand special folders that were deferred during initial render
+// Special folders (top, recent, closed, devices) require slow Chrome API calls
 async function expandDeferredFolders() {
-    console.log('[expandDeferredFolders] Starting at', performance.now().toFixed(2));
+    // Handle deferred special folders (marked with data-deferred="true")
+    const deferredLinks = [...document.querySelectorAll('#main a.folder[data-deferred="true"]')];
+    if (deferredLinks.length === 0) return;
 
-    // Separate special folders from regular bookmarks
-    // Special folders use slow Chrome APIs - don't let them block regular bookmarks
-    const isSpecialFolder = (id) => special.includes(id) || specialFolderIds.includes(id) || SpecialFolders.isFolder(id);
+    console.log(`[expandDeferredFolders] Loading ${deferredLinks.length} special folders`);
 
-    // Helper to yield to browser for repaint
-    const yieldToBrowser = () => new Promise(resolve => setTimeout(resolve, 0));
+    const promises = deferredLinks.map(async (a) => {
+        const li = a.parentNode;
+        const nodeId = li?.dataset?.nodeId;
+        if (!nodeId || !a.open || a.nextSibling) return;
 
-    // Collect all special folders to expand later
-    const pendingSpecialFolders = [];
-
-    // Handle auto-expand folders (show_root=false case where we rendered folder header temporarily)
-    const autoExpandLinks = [...document.querySelectorAll('#main a.folder[data-auto-expand="true"]')];
-    if (autoExpandLinks.length > 0) {
-        Perf.mark(`Auto-expanding ${autoExpandLinks.length} folders`);
-
-        // Separate regular and special folders
-        const regularAutoExpand = [];
-        for (const a of autoExpandLinks) {
-            const nodeId = a.parentNode?.dataset?.nodeId;
-            if (!nodeId) continue;
-            if (isSpecialFolder(nodeId)) {
-                pendingSpecialFolders.push({ a, type: 'auto-expand' });
-            } else {
-                regularAutoExpand.push(a);
-            }
+        delete a.dataset.deferred;
+        const folderName = a.textContent || nodeId;
+        const children = await getChildren({ id: nodeId, children: true }, folderName);
+        if (a.open && !a.nextSibling) {
+            renderAll(children, li);
         }
+    });
 
-        // Batch prefetch regular folder children first
-        const regularIds = regularAutoExpand.map(a => a.parentNode?.dataset?.nodeId).filter(Boolean);
-        await prefetchFolderChildrenBatch(regularIds);
-
-        // Expand regular folders immediately (synchronously for speed)
-        for (const a of regularAutoExpand) {
-            const li = a.parentNode;
-            const nodeId = li?.dataset?.nodeId;
-            if (!nodeId) continue;
-
-            delete a.dataset.autoExpand;
-            const folderName = a.textContent || nodeId;
-            const children = await getChildren({ id: nodeId, children: true }, folderName);
-            const column = li.closest('.column');
-            const ul = li.parentNode;
-            if (column && ul) {
-                li.remove();
-                children.forEach(child => {
-                    if (!coords[child.id]) render(child, ul);
-                });
-                if (ul.childNodes.length === 0) {
-                    render({ id: 'empty', title: '< Empty >' }, ul);
-                }
-            }
-        }
-        updateTooltips();
-    }
-
-    // Handle deferred open folders (folders that were open but children weren't rendered yet)
-    let totalDeferred = 0;
-    let deferredLinks;
-    while ((deferredLinks = [...document.querySelectorAll('#main a.folder[data-deferred="true"]')]).length > 0) {
-        // Separate regular and special folders
-        const regularDeferred = [];
-        for (const a of deferredLinks) {
-            const nodeId = a.parentNode?.dataset?.nodeId;
-            if (!nodeId) continue;
-            if (isSpecialFolder(nodeId)) {
-                pendingSpecialFolders.push({ a, type: 'deferred' });
-                delete a.dataset.deferred;
-            } else {
-                regularDeferred.push(a);
-            }
-        }
-
-        totalDeferred += regularDeferred.length;
-        console.log('[expandDeferredFolders] Processing', regularDeferred.length, 'regular +', pendingSpecialFolders.length, 'special at', performance.now().toFixed(2));
-
-        // Batch prefetch regular folder children first
-        const regularIds = regularDeferred.map(a => a.parentNode?.dataset?.nodeId).filter(Boolean);
-        console.log('[expandDeferredFolders] Prefetching', regularIds.length, 'folder IDs');
-        await prefetchFolderChildrenBatch(regularIds);
-        console.log('[expandDeferredFolders] Prefetch complete at', performance.now().toFixed(2));
-
-        // Fetch all children in parallel (should be instant cache hits)
-        console.log('[expandDeferredFolders] Fetching children for', regularDeferred.length, 'folders in parallel at', performance.now().toFixed(2));
-        const folderData = await Promise.all(regularDeferred.map(async (a) => {
-            const li = a.parentNode;
-            const nodeId = li?.dataset?.nodeId;
-            if (!nodeId || !a.open || a.nextSibling) return null;
-            const folderName = a.textContent || nodeId;
-            const children = await getChildren({ id: nodeId, children: true }, folderName);
-            return { a, li, nodeId, children };
-        }));
-        console.log('[expandDeferredFolders] All children fetched at', performance.now().toFixed(2));
-
-        // Render all folders
-        console.log('[expandDeferredFolders] Rendering', folderData.filter(d => d !== null).length, 'folders');
-        for (const data of folderData) {
-            if (!data) continue;
-            const { a, li, nodeId, children } = data;
-            delete a.dataset.deferred;
-            if (!a.nextSibling && a.open) {
-                renderAll(children, li);
-            }
-        }
-        console.log('[expandDeferredFolders] All folders rendered at', performance.now().toFixed(2));
-    }
-
-    if (totalDeferred > 0) {
-        Perf.mark(`Expanded ${totalDeferred} deferred folders`);
-    }
-
-    // Yield to browser to paint regular folders BEFORE starting slow Chrome API calls
-    await yieldToBrowser();
-
-    // NOW expand special folders (slow Chrome APIs) - after regular folders are painted
-    if (pendingSpecialFolders.length > 0) {
-        console.log(`[expandDeferredFolders] Loading ${pendingSpecialFolders.length} special folders`);
-        const specialPromises = pendingSpecialFolders.map(async ({ a, type }) => {
-            const li = a.parentNode;
-            const nodeId = li?.dataset?.nodeId;
-            if (!nodeId) return;
-
-            if (type === 'auto-expand') {
-                delete a.dataset.autoExpand;
-            }
-
-            const folderName = a.textContent || nodeId;
-            const children = await getChildren({ id: nodeId, children: true }, folderName);
-            if (type === 'auto-expand') {
-                const column = li.closest('.column');
-                const ul = li.parentNode;
-                if (column && ul) {
-                    li.remove();
-                    children.forEach(child => {
-                        if (!coords[child.id]) render(child, ul);
-                    });
-                    if (ul.childNodes.length === 0) {
-                        render({ id: 'empty', title: '< Empty >' }, ul);
-                    }
-                    updateTooltips();
-                }
-            } else if (!a.nextSibling && a.open) {
-                renderAll(children, li);
-            }
-        });
-        await Promise.all(specialPromises);
-    }
+    await Promise.all(promises);
+    Perf.mark(`Expanded ${deferredLinks.length} deferred special folders`);
 }
 
 // enables click and context menu for given folder
@@ -1117,7 +879,7 @@ function updateTooltips() {
 async function getChildren(node, folderName) {
     if (Array.isArray(node.children)) return node.children;
 
-    const children = await getCachedChildren(node.id, folderName);
+    const children = await getChildren_internal(node.id);
     if (!children && coords[node.id]) {
         removeRow(coords[node.id].x, coords[node.id].y);
     }
@@ -1129,10 +891,10 @@ async function getSubTree(id) {
     const specialNode = SpecialFolders.getNode(id);
     if (specialNode) return [specialNode];
 
-    const nodes = await getCachedNode(id);
-    if (nodes?.[0]) {
-        const node = nodes[0];
-        node.children = id in prefetchedData.children ? prefetchedData.children[id] : true;
+    const node = await getNode_internal(id);
+    if (node) {
+        // Mark as folder (children will be fetched on-demand)
+        node.children = true;
         return [node];
     }
     if (coords[id]) removeRow(coords[id].x, coords[id].y);
@@ -1375,16 +1137,10 @@ async function loadColumns() {
 
     if (root) {
         verifyColumns();
-        // FAST: Load folder metadata from cache (now uses in-memory cache)
-        await prefetchFolderMetadata();
         await renderColumns();
     } else {
-        Perf.mark('loadColumns: fetching root IDs + metadata from cache');
-        // Load root folder IDs and metadata from cache (now uses in-memory cache)
-        const [rootIds] = await Promise.all([
-            getRootFolderIds(),
-            prefetchFolderMetadata()
-        ]);
+        Perf.mark('loadColumns: fetching root IDs from cache');
+        const rootIds = await getRootFolderIds();
         root = [...special, ...rootIds];
         verifyColumns();
         await renderColumns();
@@ -1396,10 +1152,9 @@ async function loadColumns() {
     if (typeof requestAnimationFrame !== 'undefined') {
         Perf.waitForPaintAndReport();
 
-        // After first paint, load children data (uses in-memory cache - instant)
+        // After first paint, expand deferred special folders (slow Chrome API calls)
         requestAnimationFrame(() => {
             requestAnimationFrame(async () => {
-                await loadChildrenProgressively();
                 await expandDeferredFolders();
                 Perf.mark('Finished loading');
             });
@@ -1935,13 +1690,7 @@ if (typeof module !== 'undefined' && module.exports) {
             forEachColumnEntry((x, y, id) => ids.push(id));
             return ids;
         },
-        getCachedChildren,
-        clearPrefetchCache: () => {
-            prefetchedData.nodes = {};
-            prefetchedData.children = {};
-        },
-        getPrefetchedData: () => prefetchedData,
-        prefetchSpecialFolder,
+        getChildren_internal,
         getConfigValue,
         special,
         expandDeferredFolders,
