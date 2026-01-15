@@ -106,6 +106,8 @@ const BookmarkCache = {
             return this._allDataCache.get(key);
         }
 
+        console.log('[BookmarkCache] get: cache miss, falling back to IndexedDB for key ', key);
+
         const db = await this.openDB();
         return new Promise((resolve, reject) => {
             const tx = db.transaction(this.STORE_NAME, 'readonly');

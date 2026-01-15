@@ -1178,7 +1178,20 @@ function showCacheError(error) {
 async function loadColumns() {
     Perf.mark('loadColumns start');
 
-    // Check if bookmark cache is available
+    // Load ALL data into memory cache FIRST (single IndexedDB read)
+    // This is faster than checking status first (which would be 2 separate reads)
+    // After this, getCacheStatus() will use the in-memory cache (instant)
+    try {
+        Perf.mark('loadAllData start');
+        await BookmarkCache.loadAllData();
+        Perf.mark('loadAllData end');
+    } catch (e) {
+        console.error('[BookmarkCache] loadAllData failed:', e);
+        showCacheError(e);
+        return;
+    }
+
+    // Check if bookmark cache is valid (uses in-memory cache now - instant)
     const status = await checkCacheStatus();
     if (!status.valid) {
         console.error('[BookmarkCache] Cache not valid:', status);
@@ -1187,16 +1200,6 @@ async function loadColumns() {
     }
 
     Perf.mark('loadColumns: cache valid');
-
-    // Load ALL data into memory cache FIRST (single IndexedDB read)
-    // This is faster than multiple individual reads and makes subsequent calls instant
-    try {
-        Perf.mark('loadAllData start');
-        await BookmarkCache.loadAllData();
-        Perf.mark('loadAllData end');
-    } catch (e) {
-        console.error('[BookmarkCache] loadAllData failed:', e);
-    }
 
     columns = [];
     forEachColumnEntry((x, y, id) => {
