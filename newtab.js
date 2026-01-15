@@ -776,44 +776,42 @@ async function expandDeferredFolders() {
     if (totalDeferred > 0) {
         Perf.mark(`Expanded ${totalDeferred} deferred folders`);
     }
-    Perf.mark('Finished loading');
 
     // Yield to browser to paint regular folders BEFORE starting slow Chrome API calls
     await yieldToBrowser();
 
     // NOW expand special folders (slow Chrome APIs) - after regular folders are painted
     if (pendingSpecialFolders.length > 0) {
-        Perf.mark(`Loading ${pendingSpecialFolders.length} special folders in background`);
-        for (const { a, type } of pendingSpecialFolders) {
+        console.log(`[expandDeferredFolders] Loading ${pendingSpecialFolders.length} special folders`);
+        const specialPromises = pendingSpecialFolders.map(async ({ a, type }) => {
             const li = a.parentNode;
             const nodeId = li?.dataset?.nodeId;
-            if (!nodeId) continue;
+            if (!nodeId) return;
 
             if (type === 'auto-expand') {
                 delete a.dataset.autoExpand;
             }
 
             const folderName = a.textContent || nodeId;
-            // Fire and forget - don't block
-            getChildren({ id: nodeId, children: true }, folderName).then(children => {
-                if (type === 'auto-expand') {
-                    const column = li.closest('.column');
-                    const ul = li.parentNode;
-                    if (column && ul) {
-                        li.remove();
-                        children.forEach(child => {
-                            if (!coords[child.id]) render(child, ul);
-                        });
-                        if (ul.childNodes.length === 0) {
-                            render({ id: 'empty', title: '< Empty >' }, ul);
-                        }
-                        updateTooltips();
+            const children = await getChildren({ id: nodeId, children: true }, folderName);
+            if (type === 'auto-expand') {
+                const column = li.closest('.column');
+                const ul = li.parentNode;
+                if (column && ul) {
+                    li.remove();
+                    children.forEach(child => {
+                        if (!coords[child.id]) render(child, ul);
+                    });
+                    if (ul.childNodes.length === 0) {
+                        render({ id: 'empty', title: '< Empty >' }, ul);
                     }
-                } else if (!a.nextSibling && a.open) {
-                    renderAll(children, li);
+                    updateTooltips();
                 }
-            });
-        }
+            } else if (!a.nextSibling && a.open) {
+                renderAll(children, li);
+            }
+        });
+        await Promise.all(specialPromises);
     }
 }
 
@@ -1402,9 +1400,8 @@ async function loadColumns() {
         requestAnimationFrame(() => {
             requestAnimationFrame(async () => {
                 await loadChildrenProgressively();
-                Perf.mark('expandDeferredFolders starting');
                 await expandDeferredFolders();
-                Perf.mark('expandDeferredFolders complete');
+                Perf.mark('Finished loading');
             });
         });
     } else {
