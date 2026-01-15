@@ -1673,7 +1673,7 @@ function initSettings() {
                 const exports = document.getElementById('options_export');
                 const imports = document.getElementById('options_import');
                 const replacer = (k, v) =>
-                    (k === 'options.background_image_file' || k.startsWith('cache.') || k.startsWith('weather.')) ? undefined : v;
+                    (k === 'options.background_image_file' || k.startsWith('cache.')) ? undefined : v;
 
                 exports.value = JSON.stringify(localStorage, replacer);
                 imports.value = '';
