@@ -464,7 +464,6 @@ function render(node, target) {
                 a.dataset.deferred = 'true';
             } else {
                 // Regular bookmarks: fetch children from BookmarkCache (fast, in-memory)
-                // Use async IIFE to avoid blocking render
                 (async () => {
                     const children = await getChildren_internal(node.id);
                     if (a.open && !a.nextSibling) {
@@ -548,7 +547,6 @@ async function renderColumns() {
     await Promise.all(columnElements.map((column, i) => renderColumn(i, column)));
 
     enableDragDrop();
-    Perf.mark('renderColumns end (all columns rendered)');
 }
 
 // Expand special folders that were deferred during initial render
