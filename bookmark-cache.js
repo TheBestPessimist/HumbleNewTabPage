@@ -275,17 +275,10 @@ const BookmarkCache = {
         }
     },
 
-    /**
-     * Get the last sync timestamp
-     * @returns {Promise<number|null>}
-     */
-    async getLastSyncTime() {
-        const record = await this.get('meta:lastSync');
-        return record?.value ?? null;
-    },
 
     /**
      * Clear all cached data
+     * @visibleForTests
      * @returns {Promise<void>}
      */
     async clear() {
@@ -399,8 +392,9 @@ const BookmarkCache = {
     SPECIAL_TTL: {
         top: 10 * 60 * 1000,    // 10 minutes for top sites
         recent: Infinity,       // Recent bookmarks: no TTL (refreshed on bookmark sync)
-        closed: 1 * 60 * 1000,  // 1 minute for recently closed
-        devices: 1 * 60 * 1000  // 1 minute for other devices
+
+        closed: 60 * 1000,  // 1 minute for recently closed
+        devices: 60 * 1000  // 1 minute for other devices
     },
 
     /**
