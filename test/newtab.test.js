@@ -21,6 +21,15 @@ global.localStorage = {
     clear: function() { for (let k in mockStorage) delete mockStorage[k]; }
 };
 
+// Load themes (shared between early-styles.js and newtab.js)
+// In browser, themes.js creates a global `themes` const
+// In Node.js, we need to execute it and capture the global
+const vm = require('vm');
+const fs = require('fs');
+const themesCode = fs.readFileSync(require.resolve('../themes.js'), 'utf8');
+vm.runInThisContext(themesCode);
+global.themes = themes;
+
 // Mock bookmark data - folders have no url, bookmarks have url
 const mockBookmarks = {
     '1': { id: '1', title: 'Bookmarks Bar' },  // folder (no url)
@@ -127,38 +136,38 @@ global.window = {
 
 global.location = { search: '' };
 
-// Mock Chrome APIs
+// Mock Chrome APIs - Manifest V3 style (return promises)
 global.chrome = {
     bookmarks: {
-        getChildren: function(id, callback) {
+        getChildren: function(id) {
             apiCalls.getChildren.push(id);
             // Return copies to avoid mutation issues
             const children = (mockChildren[id] || []).map(c => ({...c}));
-            setTimeout(() => callback(children), 5);
+            return new Promise(resolve => setTimeout(() => resolve(children), 5));
         },
-        get: function(ids, callback) {
+        get: function(ids) {
             const nodes = ids.map(id => mockBookmarks[id] ? {...mockBookmarks[id]} : null).filter(Boolean);
-            setTimeout(() => callback(nodes), 5);
+            return new Promise(resolve => setTimeout(() => resolve(nodes), 5));
         },
-        getTree: function(callback) {
-            setTimeout(() => callback([{ children: [mockBookmarks['1'], mockBookmarks['2']] }]), 5);
+        getTree: function() {
+            return new Promise(resolve => setTimeout(() => resolve([{ children: [mockBookmarks['1'], mockBookmarks['2']] }]), 5));
         },
-        getRecent: function(count, callback) {
-            setTimeout(() => callback([]), 5);
+        getRecent: function(count) {
+            return new Promise(resolve => setTimeout(() => resolve([]), 5));
         }
     },
     tabs: {
-        getCurrent: function(callback) { setTimeout(() => callback({ id: 1 }), 5); },
+        getCurrent: function() { return new Promise(resolve => setTimeout(() => resolve({ id: 1 }), 5)); },
         create: function() {},
         update: function() {}
     },
     sessions: {
-        getRecentlyClosed: function(opts, callback) { setTimeout(() => callback([]), 5); },
-        getDevices: function(opts, callback) { setTimeout(() => callback([]), 5); },
+        getRecentlyClosed: function(opts) { return new Promise(resolve => setTimeout(() => resolve([]), 5)); },
+        getDevices: function(opts) { return new Promise(resolve => setTimeout(() => resolve([]), 5)); },
         onChanged: { addListener: function() {} }
     },
     topSites: {
-        get: function(callback) { setTimeout(() => callback([]), 5); }
+        get: function() { return new Promise(resolve => setTimeout(() => resolve([]), 5)); }
     }
 };
 
@@ -273,8 +282,8 @@ async function testPrefetchSpecialFolderWhenOpen() {
         { id: 'r1', title: 'Recent 1', url: 'https://recent1.com' },
         { id: 'r2', title: 'Recent 2', url: 'https://recent2.com' }
     ];
-    global.chrome.bookmarks.getRecent = function(count, callback) {
-        setTimeout(() => callback(mockRecentBookmarks), 5);
+    global.chrome.bookmarks.getRecent = function(count) {
+        return new Promise(resolve => setTimeout(() => resolve(mockRecentBookmarks), 5));
     };
 
     // Prefetch the special folder
@@ -293,9 +302,9 @@ async function testPrefetchSpecialFolderSkipsWhenClosed() {
     // localStorage.setItem('open.recent', 'true'); // intentionally not set
 
     let apiCalled = false;
-    global.chrome.bookmarks.getRecent = function(count, callback) {
+    global.chrome.bookmarks.getRecent = function(count) {
         apiCalled = true;
-        setTimeout(() => callback([]), 5);
+        return new Promise(resolve => setTimeout(() => resolve([]), 5));
     };
 
     // Prefetch the special folder
@@ -320,8 +329,8 @@ async function testPrefetchTopSitesWhenOpen() {
         { title: 'Site 3', url: 'https://site3.com' }
     ];
     global.chrome.topSites = {
-        get: function(callback) {
-            setTimeout(() => callback(mockTopSites), 5);
+        get: function() {
+            return new Promise(resolve => setTimeout(() => resolve(mockTopSites), 5));
         }
     };
 
@@ -348,9 +357,9 @@ async function testGetCachedChildrenUsesPreloadedSpecialFolder() {
     // Track if fetchSpecialFolderData would be called (it shouldn't be on first call)
     let fetchCalled = false;
     const originalFetch = global.chrome.bookmarks.getRecent;
-    global.chrome.bookmarks.getRecent = function(count, callback) {
+    global.chrome.bookmarks.getRecent = function(count) {
         fetchCalled = true;
-        callback([{ id: 'new', title: 'New', url: 'https://new.com' }]);
+        return Promise.resolve([{ id: 'new', title: 'New', url: 'https://new.com' }]);
     };
 
     // First call should use cached data, not fetch

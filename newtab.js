@@ -238,18 +238,10 @@ const SpecialFolders = {
 			case 'top':
 				if (!chrome.topSites) return [];
 				return Perf.trackApi('chrome.topSites.get', () =>
-					new Promise(resolve => {
-						chrome.topSites.get(r => {
-							resolve((r || []).slice(0, getConfigValue('number_top', 10)));
-						});
-					}));
+					chrome.topSites.get().then(r => (r || []).slice(0, getConfigValue('number_top', 10))));
 			case 'recent':
 				return Perf.trackApi('chrome.bookmarks.getRecent', () =>
-					new Promise(resolve => {
-						chrome.bookmarks.getRecent(getConfigValue('number_recent', 10), r => {
-							resolve(r || []);
-						});
-					}));
+					chrome.bookmarks.getRecent(getConfigValue('number_recent', 10)).then(r => r || []));
 			case 'closed':
 				return Perf.trackApi('chrome.sessions.getRecentlyClosed', () => getClosed());
 			case 'devices':
@@ -269,26 +261,26 @@ const specialFolderIds = special.filter(id => SpecialFolders.isFolder(id));
 // =============================================================================
 
 // Promise wrappers for Chrome bookmark APIs (with performance tracking)
+// Chrome Manifest V3 APIs return promises natively when no callback is provided
 const getBookmarkNodes = ids =>
 	(!ids || ids.length === 0) ? Promise.resolve([]) :
 	Perf.trackApi(`chrome.bookmarks.get(${ids.length} ids)`, () =>
-		new Promise(resolve => chrome.bookmarks.get(ids, results => resolve(results || []))));
+		chrome.bookmarks.get(ids).then(r => r || []));
 
 const getBookmarkChildren = id =>
 	Perf.trackApi(`chrome.bookmarks.getChildren(${id})`, () =>
-		new Promise(resolve => chrome.bookmarks.getChildren(id, results => resolve(results || []))));
+		chrome.bookmarks.getChildren(id).then(r => r || []));
 
 // FAST: Get only root folder IDs (Bookmarks Bar, Other Bookmarks, Mobile Bookmarks)
 // Uses getChildren("0") which is much faster than getTree()
 const getRootFolderIds = () =>
 	Perf.trackApi('chrome.bookmarks.getChildren(0) [root]', () =>
-		new Promise(resolve => chrome.bookmarks.getChildren("0", results =>
-			resolve((results || []).map(n => n.id)))));
+		chrome.bookmarks.getChildren("0").then(r => (r || []).map(n => n.id)));
 
 // SLOW - avoid using this! Fetches entire bookmark tree
 const getBookmarkTree = () =>
 	Perf.trackApi('chrome.bookmarks.getTree [SLOW!]', () =>
-		new Promise(resolve => chrome.bookmarks.getTree(results => resolve(results || []))));
+		chrome.bookmarks.getTree().then(r => r || []));
 
 // Cache for prefetched bookmark data
 const prefetchedData = {
@@ -1083,17 +1075,16 @@ async function openLinks(node) {
 }
 
 // opens given node
-function openLink(node, newtab) {
+async function openLink(node, newtab) {
     const { url } = node;
     if (!url) return;
 
-    chrome.tabs.getCurrent(tab => {
-        if (newtab) {
-            chrome.tabs.create({ url, active: newtab === 1, openerTabId: tab.id });
-        } else {
-            chrome.tabs.update(tab.id, { url });
-        }
-    });
+    const tab = await chrome.tabs.getCurrent();
+    if (newtab) {
+        chrome.tabs.create({ url, active: newtab === 1, openerTabId: tab.id });
+    } else {
+        chrome.tabs.update(tab.id, { url });
+    }
 }
 
 let columns; // columns[x][y] = id
@@ -1244,43 +1235,35 @@ function removeRow(xpos, ypos) {
 }
 
 // get recently closed tabs
-function getClosed() {
-    return new Promise(resolve => {
-        const maxResults = getConfig('number_closed');
-        chrome.sessions.getRecentlyClosed({ maxResults }, sessions => {
-            const nodes = sessions.slice(0, maxResults).map(session => {
-                if (session.window?.tabs.length === 1) {
-                    session.tab = session.window.tabs[0];
-                }
-                const sessionId = session.window ? session.window.sessionId : session.tab.sessionId;
-                return {
-                    title: session.tab ? session.tab.title : `${session.window.tabs.length} Tabs`,
-                    url: session.tab?.url ?? null,
-                    className: session.window ? 'window' : null,
-                    action: () => { chrome.sessions.restore(sessionId, refreshClosed); return false; }
-                };
-            });
-            resolve(nodes);
-        });
+async function getClosed() {
+    const maxResults = getConfig('number_closed');
+    const sessions = await chrome.sessions.getRecentlyClosed({ maxResults });
+    return sessions.slice(0, maxResults).map(session => {
+        if (session.window?.tabs.length === 1) {
+            session.tab = session.window.tabs[0];
+        }
+        const sessionId = session.window ? session.window.sessionId : session.tab.sessionId;
+        return {
+            title: session.tab ? session.tab.title : `${session.window.tabs.length} Tabs`,
+            url: session.tab?.url ?? null,
+            className: session.window ? 'window' : null,
+            action: () => { chrome.sessions.restore(sessionId); refreshClosed(); return false; }
+        };
     });
 }
 
-function getDevices() {
-    return new Promise(resolve => {
-        chrome.sessions.getDevices({ maxResults: getConfig('number_closed') }, devices => {
-            const nodes = devices.map(device => {
-                const children = device.sessions.flatMap(session => {
-                    const tabs = session.window ? session.window.tabs : [session.tab];
-                    return tabs.map(tab => ({ title: tab.title, url: tab.url }));
-                });
-                return {
-                    id: `device.${device.deviceName}`,
-                    title: device.deviceName,
-                    children
-                };
-            });
-            resolve(nodes);
+async function getDevices() {
+    const devices = await chrome.sessions.getDevices({ maxResults: getConfig('number_closed') });
+    return devices.map(device => {
+        const children = device.sessions.flatMap(session => {
+            const tabs = session.window ? session.window.tabs : [session.tab];
+            return tabs.map(tab => ({ title: tab.title, url: tab.url }));
         });
+        return {
+            id: `device.${device.deviceName}`,
+            title: device.deviceName,
+            children
+        };
     });
 }
 
@@ -1353,87 +1336,7 @@ const config = {
     number_recent: 10
 };
 
-// color theme values
-const themes = {
-    Default: {},
-    Classic: {
-        font_color: '#000000',
-        background_color: '#ffffff',
-        highlight_color: '#3399ff',
-        highlight_font_color: '#ffffff',
-        shadow_color: '#97cbff'
-    },
-    Dusk: {
-        font_color: '#c8b9be',
-        background_color: '#56546b',
-        highlight_color: '#494d5a',
-        highlight_font_color: '#ffd275',
-        shadow_color: '#000000'
-    },
-    Elegant: {
-        font_color: '#888888',
-        background_color: '#f6f6f6',
-        highlight_color: '#ffffff',
-        highlight_font_color: '#000000',
-        shadow_color: '#aaaaaa'
-    },
-    Frosty: {
-        font_color: '#3e5e82',
-        background_color: '#e4eef3',
-        highlight_color: '#0080c0',
-        highlight_font_color: '#ffffff',
-        shadow_color: '#8080ff'
-    },
-    Hacker: {
-        font_color: '#00ff00',
-        background_color: '#000000',
-        highlight_color: '#00ff00',
-        highlight_font_color: '#000000',
-        shadow_color: '#ff0000'
-    },
-    Melon: {
-        font_color: '#594526',
-        background_color: '#f8ffe1',
-        highlight_color: '#ff8000',
-        highlight_font_color: '#ffff80',
-        shadow_color: '#ff80c0'
-    },
-    Midnight: {
-        font_color: '#bfdfff',
-        background_color: '#101827',
-        highlight_color: '#000000',
-        highlight_font_color: '#80ecff',
-        shadow_color: '#0080ff'
-    },
-    Slate: {
-        font_color: '#555555',
-        background_color: '#b7babf',
-        highlight_color: '#aaaaaa',
-        highlight_font_color: '#000000',
-        shadow_color: '#2a2a2a'
-    },
-    Trees: {
-        font_color: '#cdd088',
-        background_color: '#566157',
-        highlight_color: '#4d674b',
-        highlight_font_color: '#ffff80',
-        shadow_color: '#183010'
-    },
-    Valentine: {
-        font_color: '#895fc2',
-        background_color: '#eae1ff',
-        highlight_color: '#ffb7f0',
-        highlight_font_color: '#f00000',
-        shadow_color: '#ffffff'
-    },
-    Warm: {
-        font_color: '#824100',
-        background_color: '#ffeedd',
-        highlight_color: '#fffae8',
-        highlight_font_color: '#800000',
-        shadow_color: '#d98764'
-    }
-};
+// themes is defined in themes.js (loaded before this script)
 let theme = {};
 
 // get config value or default
@@ -1700,7 +1603,7 @@ function initSettings() {
     });
 
     // add options to hide bookmark folders
-    chrome.bookmarks.getTree(result => {
+    chrome.bookmarks.getTree().then(async result => {
         const placeholder = document.getElementById('options_show_bookmarks');
         result[0].children.forEach(node => {
             const key = `show_${node.id}`;
@@ -1744,16 +1647,15 @@ function initSettings() {
 
         // load font list
         if (chrome.fontSettings) {
-            chrome.fontSettings.getFontList(fonts => {
-                const select = document.getElementById('options_font');
-                if (select.childNodes.length > 0) return;
+            const fonts = await chrome.fontSettings.getFontList();
+            const select = document.getElementById('options_font');
+            if (select.childNodes.length > 0) return;
 
-                [{ fontId: 'Sans-serif' }, ...fonts].forEach(({ fontId }) => {
-                    const option = document.createElement('option');
-                    option.innerText = fontId;
-                    option.selected = fontId === getConfig('font');
-                    select.appendChild(option);
-                });
+            [{ fontId: 'Sans-serif' }, ...fonts].forEach(({ fontId }) => {
+                const option = document.createElement('option');
+                option.innerText = fontId;
+                option.selected = fontId === getConfig('font');
+                select.appendChild(option);
             });
         }
     });

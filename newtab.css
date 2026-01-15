@@ -55,13 +55,6 @@ body {
 	background-size: 100% 100%;
 	vertical-align: middle;
 }
-#main a:after {
-	/* workaround Chromium issue 142154 */
-	content: '';
-	display: inline-block;
-	width: 2px;
-	margin-left: -2px;
-}
 .wrap {
 	transition-property: height, opacity;
 	transition-duration: 0.2s;
@@ -262,7 +255,7 @@ input[type="file"]::-webkit-file-upload-button {
 	width: 18px;
 	height: 16px;
 	opacity: .5;
-	background-image: -webkit-image-set(url("icons/revert.png") 1x, url("icons/revert@2x.png") 2x);
+	background-image: image-set(url("icons/revert.png") 1x, url("icons/revert@2x.png") 2x);
 	background-size: 100%;
 	cursor: pointer;
 }
@@ -270,10 +263,10 @@ input[type="file"]::-webkit-file-upload-button {
 	opacity: 1;
 }
 .folder .icon {
-	background-image: -webkit-image-set(url("icons/folder.png") 1x, url("icons/folder@2x.png") 2x);
+	background-image: image-set(url("icons/folder.png") 1x, url("icons/folder@2x.png") 2x);
 }
 .open .icon {
-	background-image: -webkit-image-set(url("icons/folder_open.png") 1x, url("icons/folder_open@2x.png") 2x);
+	background-image: image-set(url("icons/folder_open.png") 1x, url("icons/folder_open@2x.png") 2x);
 }
 .empty .icon {
 	display: none;
@@ -281,23 +274,23 @@ input[type="file"]::-webkit-file-upload-button {
 /* The following icons are copyright (c) 2012 The Chromium Authors.
    see LICENSE_chromium_BSD.txt */
 .recent .icon {
-	background-image: -webkit-image-set(url("icons/recent.png") 1x, url("icons/recent@2x.png") 2x);
+	background-image: image-set(url("icons/recent.png") 1x, url("icons/recent@2x.png") 2x);
 }
 .top .icon {
-	background-image: -webkit-image-set(url("icons/top.png") 1x, url("icons/top@2x.png") 2x);
+	background-image: image-set(url("icons/top.png") 1x, url("icons/top@2x.png") 2x);
 }
 .closed .icon {
-	background-image: -webkit-image-set(url("icons/closed.png") 1x, url("icons/closed@2x.png") 2x);
+	background-image: image-set(url("icons/closed.png") 1x, url("icons/closed@2x.png") 2x);
 }
 .window .icon {
-	background-image: -webkit-image-set(url("icons/window.png") 1x, url("icons/window@2x.png") 2x);
+	background-image: image-set(url("icons/window.png") 1x, url("icons/window@2x.png") 2x);
 }
 .devices .icon {
-	background-image: -webkit-image-set(url("icons/phone.png") 1x, url("icons/phone@2x.png") 2x);
+	background-image: image-set(url("icons/phone.png") 1x, url("icons/phone@2x.png") 2x);
 }
 .error .icon {
-	background-image: -webkit-image-set(url("icons/error.png") 1x, url("icons/error@2x.png") 2x);
+	background-image: image-set(url("icons/error.png") 1x, url("icons/error@2x.png") 2x);
 }
 #options_button {
-	background-image: -webkit-image-set(url("icons/options.png") 1x, url("icons/options@2x.png") 2x);
+	background-image: image-set(url("icons/options.png") 1x, url("icons/options@2x.png") 2x);
 }
