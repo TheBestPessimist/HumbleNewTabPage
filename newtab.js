@@ -393,9 +393,16 @@ async function loadChildrenProgressively() {
 	const bookmarkIds = columnIds.filter(id => !special.includes(id));
 	const visibleSpecialFolders = columnIds.filter(id => specialFolderIds.includes(id));
 
+	// Collect IDs of deferred open folders (these need their children prefetched too)
+	const deferredFolderIds = [...document.querySelectorAll('#main a.folder[data-deferred="true"]')]
+		.map(a => a.parentNode?.dataset?.nodeId)
+		.filter(id => id && !special.includes(id) && !specialFolderIds.includes(id));
+
+	// Combine all IDs that need prefetching (deduplicated)
+	const allIds = [...new Set([...bookmarkIds, ...deferredFolderIds])];
+
 	// Load in small batches to avoid API congestion (Chrome API bottleneck)
 	const BATCH_SIZE = 3;
-	const allIds = [...bookmarkIds];
 
 	for (let i = 0; i < allIds.length; i += BATCH_SIZE) {
 		const batch = allIds.slice(i, i + BATCH_SIZE);
@@ -588,10 +595,11 @@ async function expandDeferredFolders() {
     }
 
     // Handle deferred open folders (folders that were open but children weren't rendered yet)
-    const deferredLinks = [...document.querySelectorAll('#main a.folder[data-deferred="true"]')];
-
-    if (deferredLinks.length > 0) {
-        Perf.mark(`Expanding ${deferredLinks.length} deferred folders`);
+    // Loop until no more deferred folders exist (rendering children may create new deferred folders)
+    let totalDeferred = 0;
+    let deferredLinks;
+    while ((deferredLinks = [...document.querySelectorAll('#main a.folder[data-deferred="true"]')]).length > 0) {
+        totalDeferred += deferredLinks.length;
 
         // Expand all deferred folders in parallel
         await Promise.all(deferredLinks.map(async (a) => {
@@ -606,13 +614,10 @@ async function expandDeferredFolders() {
                 renderAll(children, li);
             }
         }));
-
-        Perf.mark('Deferred folders expanded');
     }
 
-    // Activate favicons for all newly rendered bookmarks (from both auto-expand and deferred folders)
-    if (typeof FaviconCache !== 'undefined') {
-        FaviconCache.activateFavicons();
+    if (totalDeferred > 0) {
+        Perf.mark(`Expanded ${totalDeferred} deferred folders`);
     }
 }
 
@@ -1279,10 +1284,6 @@ function refreshClosed() {
 
     getChildren({ id: 'closed' }).then(result => {
         targets.forEach(target => renderAll(result, target));
-        // Activate favicons for newly rendered bookmarks
-        if (typeof FaviconCache !== 'undefined') {
-            FaviconCache.activateFavicons();
-        }
     });
 }
 
@@ -1702,6 +1703,9 @@ if (typeof module !== 'undefined' && module.exports) {
         getPrefetchedData: () => prefetchedData,
         prefetchSpecialFolder,
         getConfigValue,
-        special
+        special,
+        expandDeferredFolders,
+        render,
+        renderAll
     };
 }
