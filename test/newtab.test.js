@@ -15,94 +15,60 @@ if (typeof structuredClone === 'undefined') {
 // Mock IndexedDB using fake-indexeddb
 require('fake-indexeddb/auto');
 
-// Track API calls for verification
-let apiCalls = { getChildren: [], cacheGetFolder: [] };
+// Use @webext-core/fake-browser for supported Chrome APIs
+const { fakeBrowser } = require('@webext-core/fake-browser');
 
 // Load themes (shared between early-styles.js and newtab.js)
-// Use require and extract the themes variable
 const themesModule = require('../themes.js');
 global.themes = themesModule || global.themes;
 
-// Mock bookmark data
-const mockBookmarks = {
-    '1': { id: '1', title: 'Bookmarks Bar' },
-    '2': { id: '2', title: 'Other Bookmarks' },
-    '10': { id: '10', title: 'Folder A' },
-    '11': { id: '11', title: 'Site 1', url: 'https://example.com' },
-    '12': { id: '12', title: 'Folder B' },
-    '20': { id: '20', title: 'Site 2', url: 'https://test.com' },
-    '21': { id: '21', title: 'Site 3', url: 'https://demo.com' },
-    '100': { id: '100', title: 'Nested 1', url: 'https://nested1.com' },
-    '101': { id: '101', title: 'Nested 2', url: 'https://nested2.com' },
-    '102': { id: '102', title: 'Nested Folder C' },
-    '1000': { id: '1000', title: 'Deep 1', url: 'https://deep1.com' },
-    '1001': { id: '1001', title: 'Deep 2', url: 'https://deep2.com' }
-};
+// Use the REAL BookmarkCache implementation (with fake-indexeddb)
+const BookmarkCache = require('../bookmark-cache.js');
+global.BookmarkCache = BookmarkCache;
 
-// Build mock folder data for cache (with isFolder flag)
-const mockFolders = {
-    '0': {
-        id: '0',
-        title: '',
-        parentId: null,
-        children: [
-            { id: '1', title: 'Bookmarks Bar', isFolder: true },
-            { id: '2', title: 'Other Bookmarks', isFolder: true }
-        ]
-    },
-    '1': {
-        id: '1',
-        title: 'Bookmarks Bar',
-        parentId: '0',
-        children: [
-            { id: '10', title: 'Folder A', isFolder: true },
-            { id: '11', title: 'Site 1', url: 'https://example.com' },
-            { id: '12', title: 'Folder B', isFolder: true }
-        ]
-    },
-    '2': {
-        id: '2',
-        title: 'Other Bookmarks',
-        parentId: '0',
-        children: [
-            { id: '20', title: 'Site 2', url: 'https://test.com' },
-            { id: '21', title: 'Site 3', url: 'https://demo.com' }
-        ]
-    },
-    '10': {
-        id: '10',
-        title: 'Folder A',
-        parentId: '1',
-        children: [
-            { id: '100', title: 'Nested 1', url: 'https://nested1.com' },
-            { id: '101', title: 'Nested 2', url: 'https://nested2.com' },
-            { id: '102', title: 'Nested Folder C', isFolder: true }
-        ]
-    },
-    '12': {
-        id: '12',
-        title: 'Folder B',
-        parentId: '1',
-        children: []
-    },
-    '102': {
-        id: '102',
-        title: 'Nested Folder C',
-        parentId: '10',
-        children: [
-            { id: '1000', title: 'Deep 1', url: 'https://deep1.com' },
-            { id: '1001', title: 'Deep 2', url: 'https://deep2.com' }
-        ]
-    }
-};
+// Test bookmark data - this will be loaded into the real BookmarkCache
+const testBookmarkTree = [{
+    id: '0',
+    title: '',
+    children: [
+        {
+            id: '1',
+            title: 'Bookmarks Bar',
+            children: [
+                { id: '10', title: 'Folder A', children: [
+                    { id: '100', title: 'Nested 1', url: 'https://nested1.com' },
+                    { id: '101', title: 'Nested 2', url: 'https://nested2.com' },
+                    { id: '102', title: 'Nested Folder C', children: [
+                        { id: '1000', title: 'Deep 1', url: 'https://deep1.com' },
+                        { id: '1001', title: 'Deep 2', url: 'https://deep2.com' }
+                    ]}
+                ]},
+                { id: '11', title: 'Site 1', url: 'https://example.com' },
+                { id: '12', title: 'Folder B', children: [] }
+            ]
+        },
+        {
+            id: '2',
+            title: 'Other Bookmarks',
+            children: [
+                { id: '20', title: 'Site 2', url: 'https://test.com' },
+                { id: '21', title: 'Site 3', url: 'https://demo.com' }
+            ]
+        }
+    ]
+}];
 
-const mockChildren = {
-    '1': [mockBookmarks['10'], mockBookmarks['11'], mockBookmarks['12']],
-    '2': [mockBookmarks['20'], mockBookmarks['21']],
-    '10': [mockBookmarks['100'], mockBookmarks['101'], mockBookmarks['102']],
-    '12': [],
-    '102': [mockBookmarks['1000'], mockBookmarks['1001']]
-};
+// Top sites test data
+const testTopSites = [
+    { title: 'Google', url: 'https://google.com' },
+    { title: 'GitHub', url: 'https://github.com' }
+];
+
+// Recently closed test data
+const testRecentlyClosed = [];
+
+// Devices test data
+const testDevices = [];
 
 function setupDOM() {
     document.body.innerHTML = `
@@ -127,83 +93,103 @@ function setupGlobals() {
         global.performance.getEntriesByType = () => [];
     }
 
+    // Start with fakeBrowser for supported APIs (tabs, storage, runtime, etc.)
+    // Then add custom implementations for unsupported APIs
     global.chrome = {
+        // Use fakeBrowser's implementations where available
+        tabs: fakeBrowser.tabs,
+        storage: fakeBrowser.storage,
+        runtime: fakeBrowser.runtime,
+
+        // Custom implementations for APIs not in fakeBrowser
         bookmarks: {
+            getTree: () => Promise.resolve(testBookmarkTree),
             getChildren: (id) => {
-                apiCalls.getChildren.push(id);
-                const children = (mockChildren[id] || []).map(c => ({...c}));
-                return Promise.resolve(children);
+                // Find folder in tree and return its children
+                const findFolder = (nodes, targetId) => {
+                    for (const node of nodes) {
+                        if (node.id === targetId) return node;
+                        if (node.children) {
+                            const found = findFolder(node.children, targetId);
+                            if (found) return found;
+                        }
+                    }
+                    return null;
+                };
+                const folder = findFolder(testBookmarkTree, id);
+                return Promise.resolve(folder?.children || []);
             },
             get: (ids) => {
-                const nodes = ids.map(id => mockBookmarks[id] ? {...mockBookmarks[id]} : null).filter(Boolean);
-                return Promise.resolve(nodes);
+                const findNode = (nodes, targetId) => {
+                    for (const node of nodes) {
+                        if (node.id === targetId) return node;
+                        if (node.children) {
+                            const found = findNode(node.children, targetId);
+                            if (found) return found;
+                        }
+                    }
+                    return null;
+                };
+                const results = ids.map(id => findNode(testBookmarkTree, id)).filter(Boolean);
+                return Promise.resolve(results);
             },
-            getTree: () => Promise.resolve([{ children: [mockBookmarks['1'], mockBookmarks['2']] }]),
-            getRecent: () => Promise.resolve([])
-        },
-        tabs: {
-            getCurrent: () => Promise.resolve({ id: 1 }),
-            create: () => {},
-            update: () => {}
+            getRecent: (count) => Promise.resolve([])
         },
         sessions: {
-            getRecentlyClosed: () => Promise.resolve([]),
-            getDevices: () => Promise.resolve([]),
-            onChanged: { addListener: () => {} }
+            getRecentlyClosed: () => Promise.resolve(testRecentlyClosed),
+            getDevices: () => Promise.resolve(testDevices),
+            restore: (sessionId) => Promise.resolve(),
+            onChanged: { addListener: () => {}, removeListener: () => {} }
         },
-        topSites: { get: () => Promise.resolve([]) }
+        topSites: {
+            get: () => Promise.resolve(testTopSites)
+        }
+        // Note: fontSettings is optional and only used in options panel
     };
 }
 
-// Mock the BookmarkCache module before requiring newtab.js
-// Note: jest.mock is hoisted, so we need to reference mockFolders via a getter
-const mockBookmarkCache = {
-    DB_NAME: 'BookmarkCacheTest',
-    STORE_NAME: 'bookmarks',
-    CACHE_VERSION: 1,
-    _db: null,
-    openDB: jest.fn().mockResolvedValue({}),
-    close: jest.fn(),
-    getFolder: jest.fn((id) => {
-        return Promise.resolve(mockFolders[id] ? structuredClone(mockFolders[id]) : null);
-    }),
-    getFolders: jest.fn((ids) => {
-        const result = new Map();
-        ids.forEach(id => {
-            if (mockFolders[id]) result.set(id, structuredClone(mockFolders[id]));
-        });
-        return Promise.resolve(result);
-    }),
-    getCacheStatus: jest.fn().mockResolvedValue({ valid: true, lastSync: Date.now(), version: 1 }),
-    put: jest.fn().mockResolvedValue(),
-    get: jest.fn().mockResolvedValue(),
-    clear: jest.fn().mockResolvedValue(),
-    // Special folder caching methods
-    getSpecialFolder: jest.fn().mockResolvedValue(null), // Return null to trigger fresh fetch
-    setSpecialFolder: jest.fn().mockResolvedValue(),
-    loadAllData: jest.fn().mockResolvedValue(new Map())
-};
+/**
+ * Populate the real BookmarkCache with test data
+ */
+async function populateBookmarkCache() {
+    await BookmarkCache.openDB();
+    await BookmarkCache.clear();
 
-jest.mock('../bookmark-cache.js', () => mockBookmarkCache);
+    // Use the real flattenTree and replaceAll methods
+    const records = BookmarkCache.flattenTree(testBookmarkTree);
 
-// Also set as global since newtab.js uses it as a global (loaded via script tag in browser)
-global.BookmarkCache = mockBookmarkCache;
+    // Add metadata (must match format used by fullSync)
+    const now = Date.now();
+    records.push({ key: 'meta:version', value: { value: BookmarkCache.CACHE_VERSION } });
+    records.push({ key: 'meta:lastSync', value: { value: now } });
+
+    await BookmarkCache.replaceAll(records);
+
+    // Load into memory cache for fast reads
+    await BookmarkCache.loadAllData(true);
+}
 
 describe('newtab.js', () => {
     beforeEach(async () => {
+        // Reset fake-browser state
+        fakeBrowser.reset();
+
         setupDOM();
         setupGlobals();
         localStorage.clear();
-        apiCalls = { getChildren: [], cacheGetFolder: [] };
 
-        // Reset mock call counts
-        mockBookmarkCache.getFolder.mockClear();
-        mockBookmarkCache.getFolders.mockClear();
-        mockBookmarkCache.getSpecialFolder.mockClear();
-        mockBookmarkCache.setSpecialFolder.mockClear();
+        // Reset the real BookmarkCache and populate with test data
+        BookmarkCache.close();
+        BookmarkCache._db = null;
+        BookmarkCache._allDataCache = null;
+        await populateBookmarkCache();
 
-        // Clear newtab.js cache
+        // Clear newtab.js module cache so it reloads fresh
         delete require.cache[require.resolve('../newtab.js')];
+    });
+
+    afterEach(() => {
+        BookmarkCache.close();
     });
 
     describe('getColumnIds', () => {
@@ -221,10 +207,8 @@ describe('newtab.js', () => {
     });
 
     describe('getChildren_internal', () => {
-        // Note: These tests are skipped because they require complex mocking of the
-        // BookmarkCache module. The functionality is tested via bookmark-cache.test.js
-        // and integration testing in the browser.
-        test.skip('fetches children from cache on demand', async () => {
+        // These tests now use the REAL BookmarkCache with fake-indexeddb!
+        test('fetches children from cache on demand', async () => {
             const { getChildren_internal } = require('../newtab.js');
 
             const children = await getChildren_internal('1');
@@ -233,7 +217,7 @@ describe('newtab.js', () => {
             expect(children.map(c => c.id)).toEqual(['10', '11', '12']);
         });
 
-        test.skip('marks folders with isFolder=true', async () => {
+        test('marks folders with children=true', async () => {
             const { getChildren_internal } = require('../newtab.js');
 
             const children = await getChildren_internal('1');
@@ -247,25 +231,30 @@ describe('newtab.js', () => {
             expect(folderB.children).toBe(true);
         });
 
+        test('fetches nested folder children correctly', async () => {
+            const { getChildren_internal } = require('../newtab.js');
+
+            const children = await getChildren_internal('10');
+
+            expect(children).toHaveLength(3);
+            expect(children.map(c => c.id)).toEqual(['100', '101', '102']);
+            expect(children[0].url).toBe('https://nested1.com');
+            expect(children[2].children).toBe(true); // Nested Folder C is a folder
+        });
+
         test('fetches special folder data from cache (not Chrome APIs)', async () => {
-            // Special folders (except 'top') now read from cache only, no API fallback
+            // Store special folder data in the real cache
             const mockRecent = [
                 { id: 'r1', title: 'Recent 1', url: 'https://recent1.com' },
                 { id: 'r2', title: 'Recent 2', url: 'https://recent2.com' }
             ];
-
-            // Set up cache to return data
-            mockBookmarkCache.getSpecialFolder.mockResolvedValue({
-                data: mockRecent,
-                fresh: true
-            });
+            await BookmarkCache.setSpecialFolder('recent', mockRecent);
 
             const { getChildren_internal } = require('../newtab.js');
             const result = await getChildren_internal('recent');
 
             expect(result).toHaveLength(2);
             expect(result[0].title).toBe('Recent 1');
-            expect(mockBookmarkCache.getSpecialFolder).toHaveBeenCalledWith('recent');
         });
 
         test('fetches top sites from Chrome APIs (only special folder that uses API)', async () => {
@@ -277,8 +266,8 @@ describe('newtab.js', () => {
             ];
             global.chrome.topSites = { get: () => Promise.resolve(mockTopSites) };
 
-            // Cache miss - return null so it fetches from API
-            mockBookmarkCache.getSpecialFolder.mockResolvedValue(null);
+            // Ensure no cached data for 'top'
+            // (The real BookmarkCache.getSpecialFolder will return null if not set)
 
             const { getChildren_internal } = require('../newtab.js');
             const result = await getChildren_internal('top');
@@ -286,16 +275,55 @@ describe('newtab.js', () => {
             expect(result).toHaveLength(2);
             expect(result[0].title).toBe('Site 1');
         });
+
+        test('returns empty array for empty folder', async () => {
+            const { getChildren_internal } = require('../newtab.js');
+
+            const children = await getChildren_internal('12'); // Folder B is empty
+
+            expect(children).toHaveLength(0);
+        });
+    });
+
+    describe('BookmarkCache integration', () => {
+        test('getFolder returns correct folder data', async () => {
+            const folder = await BookmarkCache.getFolder('1');
+
+            expect(folder.id).toBe('1');
+            expect(folder.title).toBe('Bookmarks Bar');
+            expect(folder.children).toHaveLength(3);
+        });
+
+        test('getCacheStatus returns valid status after population', async () => {
+            const status = await BookmarkCache.getCacheStatus();
+
+            expect(status.valid).toBe(true);
+            expect(status.version).toBe(BookmarkCache.CACHE_VERSION);
+            expect(status.lastSync).toBeGreaterThan(0);
+        });
+
+        test('loadAllData loads all folders into memory', async () => {
+            const data = await BookmarkCache.loadAllData();
+
+            // Should have folders: 0, 1, 2, 10, 12, 102 + meta records
+            expect(data.size).toBeGreaterThanOrEqual(6);
+            expect(data.has('folder:1')).toBe(true);
+            expect(data.has('folder:10')).toBe(true);
+        });
     });
 
     describe('expandDeferredFolders', () => {
-        // Note: expandDeferredFolders now only handles special folders (top, recent, closed, devices)
-        // which require slow Chrome API calls. Regular bookmarks are loaded immediately from
-        // BookmarkCache's in-memory cache.
+        // Note: This test is skipped because render() requires full module initialization
+        // (coords, columns, root variables) which happens during the main page load.
+        // The expandDeferredFolders functionality is tested via integration testing in the browser.
         test.skip('expands deferred special folders', async () => {
             localStorage.setItem('options.remember_open', '1');
             localStorage.setItem('open.recent', 'true');
             localStorage.setItem('column.0.0', 'recent');
+
+            // Store recent bookmarks in cache
+            const mockRecent = [{ id: 'r1', title: 'Recent 1', url: 'https://r1.com' }];
+            await BookmarkCache.setSpecialFolder('recent', mockRecent);
 
             const { expandDeferredFolders, render } = require('../newtab.js');
             await new Promise(r => setTimeout(r, 50));
@@ -307,9 +335,6 @@ describe('newtab.js', () => {
             const ul = document.createElement('ul');
             column.appendChild(ul);
             main.appendChild(column);
-
-            const mockRecent = [{ id: 'r1', title: 'Recent 1', url: 'https://r1.com' }];
-            global.chrome.bookmarks.getRecent = () => Promise.resolve(mockRecent);
 
             render({ id: 'recent', title: 'Recent bookmarks', children: true }, ul);
 
