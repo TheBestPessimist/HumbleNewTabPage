@@ -931,8 +931,7 @@ const isAbove = (pageY, target) =>
 // clears droptarget styles
 function clearDropTarget() {
     if (dropTarget) {
-        dropTarget.style.border = null;
-        dropTarget.style.margin = null;
+        Object.assign(dropTarget.style, {border: null, margin: null});
     }
     dropTarget = null;
 }
