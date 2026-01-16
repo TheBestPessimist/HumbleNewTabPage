@@ -1033,14 +1033,16 @@ async function getSubTree(id) {
     return [];
 }
 
-// sets css classes for node
+// sets css classes for node - build class string for single assignment
 function setClass(target, node, isopen) {
-    if (node.className) target.classList.add(node.className);
-    if (node.children) target.classList.add('folder');
-    target.classList.toggle('open', !!isopen);
+    const classes = [];
+    if (node.className) classes.push(node.className);
+    if (node.children) classes.push('folder');
+    if (isopen) classes.push('open');
     if (SpecialFolders.isSpecial(node.id) || node.id === 'empty') {
-        target.classList.add(node.id);
+        classes.push(node.id);
     }
+    if (classes.length > 0) target.className = classes.join(' ');
 }
 
 // gets best icon for a node
