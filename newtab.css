@@ -3,7 +3,7 @@ body {
 	background-attachment: fixed;
 	background-position: left top;
 	width: 100vw;
-	margin: 0 auto;
+	margin-inline: auto; /* Modern logical property */
 	overflow-x: hidden;
 	font-family: sans-serif;
 	font-size: 62.5%;
