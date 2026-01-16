@@ -588,7 +588,7 @@ async function renderColumn(index, target) {
 // Cached DOM element references (avoid repeated getElementById calls)
 let mainElement = null;
 function getMainElement() {
-    return mainElement || (mainElement = document.getElementById('main'));
+    return mainElement ??= document.getElementById('main');
 }
 
 // render all columns to main div
