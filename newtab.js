@@ -477,7 +477,7 @@ async function getNode_internal(id) {
 
 // Helper to get config value (works before full config is loaded)
 function getConfigValue(key, defaultValue) {
-    const value = localStorage.getItem(`options.${key}`);
+    const value = localStorage.getItem('options.' + key);
     return value !== null ? Number(value) : defaultValue;
 }
 
@@ -1501,7 +1501,8 @@ function getConfig(key) {
     const cached = configCache.get(key);
     if (cached !== undefined) return cached;
 
-    const value = localStorage.getItem(`options.${key}`);
+    const storageKey = 'options.' + key;
+    const value = localStorage.getItem(storageKey);
     let result;
     if (value != null) {
         // Dynamic show_* keys (e.g., show_2, show_4) are numbers but not in config
@@ -1519,10 +1520,11 @@ function setConfig(key, value) {
     // Invalidate cache for this key
     configCache.delete(key);
 
+    const storageKey = 'options.' + key;
     if (value != null) {
-        localStorage.setItem(`options.${key}`, typeof config[key] === 'number' ? Number(value) : value);
+        localStorage.setItem(storageKey, typeof config[key] === 'number' ? Number(value) : value);
     } else {
-        localStorage.removeItem(`options.${key}`);
+        localStorage.removeItem(storageKey);
         value = key in theme ? theme[key] : config[key];
     }
 
