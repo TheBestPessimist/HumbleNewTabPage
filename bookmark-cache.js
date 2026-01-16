@@ -135,7 +135,7 @@ const BookmarkCache = {
      * @returns {Promise<{id: string, title: string, parentId: string, children: Array}|null>}
      */
     async getFolder(folderId) {
-        const record = await this.get('folder:' + folderId);
+        const record = await this.get(`folder:${folderId}`);
         return record || null;
     },
 
