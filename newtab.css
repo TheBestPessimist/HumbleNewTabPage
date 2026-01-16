@@ -59,6 +59,7 @@ body {
 	transition-property: height, opacity;
 	transition-duration: 0.2s;
 	transition-timing-function: ease-out;
+	will-change: height, opacity;
 }
 .column {
 	display: inline-block;
