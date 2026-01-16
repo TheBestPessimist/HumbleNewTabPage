@@ -819,8 +819,8 @@ function renderMenu(items, x, y) {
     ul.append(fragment);
 
     document.body.append(ul);
-    ul.style.left = Math.max(Math.min(x, window.innerWidth + window.scrollX - ul.clientWidth), 0) + 'px';
-    ul.style.top = Math.max(Math.min(y, window.innerHeight + window.scrollY - ul.clientHeight), 0) + 'px';
+    ul.style.left = `${Math.max(Math.min(x, window.innerWidth + window.scrollX - ul.clientWidth), 0)}px`;
+    ul.style.top = `${Math.max(Math.min(y, window.innerHeight + window.scrollY - ul.clientHeight), 0)}px`;
     ul.onmousedown = e => {
         e.stopPropagation();
         return true;
