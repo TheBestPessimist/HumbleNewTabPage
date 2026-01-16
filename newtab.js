@@ -77,9 +77,10 @@ const Perf = {
         // Resource timing for scripts
         const resources = performance.getEntriesByType('resource');
 
-        console.log('\n' + '='.repeat(60));
+        const separator = '='.repeat(60);
+        console.log(separator);
         console.log('PERFORMANCE REPORT - Copy everything below this line');
-        console.log('='.repeat(60));
+        console.log(separator);
 
         // Summary stats
         console.log('\n📊 SUMMARY:');
@@ -211,9 +212,9 @@ const Perf = {
             console.log(`   Need to reduce by: ${(totalFromNav - 25).toFixed(0)}ms`);
         }
 
-        console.log('\n' + '='.repeat(60));
+        console.log(separator);
         console.log('END OF PERFORMANCE REPORT');
-        console.log('='.repeat(60) + '\n');
+        console.log(separator + '\n');
     }
 };
 
