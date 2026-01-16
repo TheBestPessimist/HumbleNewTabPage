@@ -1200,7 +1200,10 @@ async function openLinks(node) {
 function openLink(node, newtab) {
     const {url} = node;
     if (!url) return;
-    if (newtab) return void window.open(url, '_blank');
+    if (newtab) {
+        window.open(url, '_blank');
+        return;
+    }
     window.location.href = url;
 }
 
