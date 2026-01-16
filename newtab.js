@@ -497,7 +497,7 @@ function render(node, target) {
         a.style.pointerEvents = 'none';
     }
 
-    li.appendChild(a);
+    li.append(a); // Modern API
 
     // folder
     if (children) {
@@ -534,7 +534,7 @@ function render(node, target) {
         enableDragFolder(node, a);
     }
 
-    target.appendChild(li);
+    target.append(li); // Modern API
     return li;
 }
 
@@ -554,14 +554,14 @@ function renderAll(nodes, target, toplevel) {
         render({id: 'empty', title: '< Empty >'}, ul);
     }
     if (toplevel) {
-        fragment.appendChild(ul);
-        target.appendChild(fragment);
+        fragment.append(ul);
+        target.append(fragment);
     } else {
         // wrap child ul for animation
         const wrap = document.createElement('div');
-        wrap.appendChild(ul);
-        fragment.appendChild(wrap);
-        target.appendChild(fragment);
+        wrap.append(ul);
+        fragment.append(wrap);
+        target.append(fragment);
     }
     updateTooltips();
     return ul;
@@ -603,7 +603,7 @@ async function renderColumns() {
         column.className = 'column';
         column.style.width = `${(1 / columns.length) * 100}%`;
         enableDragColumn(i, column);
-        target.appendChild(column);
+        target.append(column); // Modern API
         return column;
     });
 
@@ -728,8 +728,8 @@ function renderMenu(items, x, y) {
             // Spacer - only add if not at start or end
             if (i > 0 && i < items.length - 1) {
                 const li = document.createElement('li');
-                li.appendChild(document.createElement('hr'));
-                ul.appendChild(li);
+                li.append(document.createElement('hr'));
+                ul.append(li);
             }
             return;
         }
@@ -741,11 +741,11 @@ function renderMenu(items, x, y) {
             item.action();
             return false;
         };
-        li.appendChild(a);
-        ul.appendChild(li);
+        li.append(a);
+        ul.append(li);
     });
 
-    document.body.appendChild(ul);
+    document.body.append(ul);
     ul.style.left = `${Math.max(Math.min(x, window.innerWidth + window.scrollX - ul.clientWidth), 0)}px`;
     ul.style.top = `${Math.max(Math.min(y, window.innerHeight + window.scrollY - ul.clientHeight), 0)}px`;
     ul.onmousedown = e => {
@@ -1199,7 +1199,7 @@ function showCacheError(error) {
         </ul>
         <p>Check the console for more details.</p>
     `;
-    main.appendChild(errorDiv);
+    main.append(errorDiv);
 
     console.error('[BookmarkCache] Cache unavailable:', error);
     console.error('[BookmarkCache] Cache status:', cacheStatus);
