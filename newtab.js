@@ -1103,8 +1103,8 @@ function getIcon(node) {
         icon.decoding = 'async';
         icon.src = url;
         if (url2x) icon.srcset = `${url2x} 2x`;
+        icon.alt = '';
     }
-    icon.alt = ' ';
     return icon;
 }
 
