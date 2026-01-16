@@ -102,11 +102,14 @@ const Perf = {
             console.log(`  DOM interactive: ${navTiming.domInteractive.toFixed(2)}ms`);
         }
 
-        // Script loading times
-        const scriptResources = resources.filter(r => r.name.includes('.js'));
+        // Script loading times - filter with for loop
+        const scriptResources = [];
+        for (let i = 0, len = resources.length; i < len; i++) {
+            const r = resources[i];
+            if (r.name.includes('.js')) scriptResources.push(r);
+        }
         if (scriptResources.length > 0) {
             console.log('\n📜 SCRIPT LOADING:');
-            // Use for loop for better performance
             for (let i = 0, len = scriptResources.length; i < len; i++) {
                 const r = scriptResources[i];
                 const name = r.name.split('/').at(-1); // Modern way to get last element
