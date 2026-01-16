@@ -20,11 +20,6 @@ const SpecialFolders = {
     _specialSet: new Set(['top', 'recent', 'closed', 'devices']),
 
     // Check if an ID is a special folder (O(1) Set lookup)
-    isFolder(id) {
-        return this._specialSet.has(id);
-    },
-
-    // Check if an ID is any special type (O(1) Set lookup)
     isSpecial(id) {
         return this._specialSet.has(id);
     },
@@ -114,7 +109,7 @@ const special = SpecialFolders.all;
 const specialFolderIds = [];
 for (let i = 0, len = special.length; i < len; i++) {
     const id = special[i];
-    if (SpecialFolders.isFolder(id)) specialFolderIds.push(id);
+    if (SpecialFolders.isSpecial(id)) specialFolderIds.push(id);
 }
 
 // =============================================================================
@@ -211,7 +206,7 @@ function forEachColumnEntry(fn) {
 // Uses BookmarkCache's in-memory cache for regular bookmarks (fast after loadAllData)
 async function getChildren_internal(id) {
     // Special folders use Chrome APIs (fetched fresh each time)
-    if (SpecialFolders.isFolder(id)) {
+    if (SpecialFolders.isSpecial(id)) {
         return SpecialFolders.fetchChildrenOfSpecialFolder(id);
     }
 
@@ -312,7 +307,7 @@ function render(node, target) {
             // If children are already loaded as an array, render them immediately
             if (Array.isArray(children)) {
                 renderAll(children, li);
-            } else if (SpecialFolders.isFolder(id)) {
+            } else if (SpecialFolders.isSpecial(id)) {
                 // Special folders require slow Chrome API calls - defer loading
                 a.dataset.deferred = 'true';
             } else {
