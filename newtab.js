@@ -1052,9 +1052,11 @@ async function toggle(node, a) {
             // auto-close child folders
             if (getConfig('auto_close')) {
                 const wrapper = a.nextSibling.tagName === 'DIV' ? a.nextSibling.firstChild : a.nextSibling;
-                [...wrapper.children].forEach(li => {
-                    if (li.firstChild?.open) li.firstChild.onclick();
-                });
+                const wrapperChildren = wrapper.children;
+                for (let i = 0, len = wrapperChildren.length; i < len; i++) {
+                    const child = wrapperChildren[i].firstChild;
+                    if (child?.open) child.onclick();
+                }
             }
             animate(node, a, isopen);
         }
@@ -1063,10 +1065,11 @@ async function toggle(node, a) {
         localStorage.setItem(`open.${node.id}`, true);
         // auto-close sibling folders
         if (getConfig('auto_close')) {
-            [...a.parentNode.parentNode.children].forEach(li => {
-                const sibling = li.firstChild;
+            const siblings = a.parentNode.parentNode.children;
+            for (let i = 0, len = siblings.length; i < len; i++) {
+                const sibling = siblings[i].firstChild;
                 if (sibling !== a && sibling?.open) sibling.onclick();
-            });
+            }
         }
         // open folder
         if (a.nextSibling) {
