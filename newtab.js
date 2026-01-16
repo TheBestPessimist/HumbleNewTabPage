@@ -1171,12 +1171,21 @@ function verifyColumns() {
     // default layout
     if (columns.length === 0) {
         columns.push([]);
-        columns.push(special.filter(a => getConfig(`show_${a}`)));
+        const defaultColumn = [];
+        for (let i = 0, len = special.length; i < len; i++) {
+            const a = special[i];
+            if (getConfig(`show_${a}`)) defaultColumn.push(a);
+        }
+        columns.push(defaultColumn);
     }
 
     // find missing root items
     const existing = new Set(columns.flat());
-    const missing = root.filter(id => !existing.has(id));
+    const missing = [];
+    for (let i = 0, len = root.length; i < len; i++) {
+        const id = root[i];
+        if (!existing.has(id)) missing.push(id);
+    }
 
     // add missing root items - use for loop for performance
     for (let i = 0, len = missing.length; i < len; i++) {
