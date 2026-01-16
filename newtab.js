@@ -1228,7 +1228,7 @@ function verifyColumns() {
         const defaultColumn = [];
         for (let i = 0, len = special.length; i < len; i++) {
             const a = special[i];
-            if (getConfig('show_' + a)) defaultColumn.push(a);
+            if (getConfig(`show_${a}`)) defaultColumn.push(a);
         }
         columns.push(defaultColumn);
     }
