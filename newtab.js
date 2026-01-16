@@ -112,7 +112,8 @@ const Perf = {
             console.log('\n📜 SCRIPT LOADING:');
             for (let i = 0, len = scriptResources.length; i < len; i++) {
                 const r = scriptResources[i];
-                const name = r.name.split('/').at(-1); // Modern way to get last element
+                const parts = r.name.split('/');
+                const name = parts[parts.length - 1]; // Direct index access faster than .at()
                 console.log(`  ${name}: start=${r.startTime.toFixed(1)}ms, duration=${r.duration.toFixed(1)}ms`);
             }
         }
@@ -786,7 +787,8 @@ function renderMenu(items, x, y) {
     const ul = document.createElement('ul');
     ul.className = 'menu';
 
-    // Use for loop for better performance
+    // Use DocumentFragment to batch DOM operations
+    const fragment = document.createDocumentFragment();
     for (let i = 0, len = items.length; i < len; i++) {
         const item = items[i];
         if (!item) {
@@ -794,7 +796,7 @@ function renderMenu(items, x, y) {
             if (i > 0 && i < len - 1) {
                 const li = document.createElement('li');
                 li.append(document.createElement('hr'));
-                ul.append(li);
+                fragment.append(li);
             }
             continue;
         }
@@ -807,8 +809,9 @@ function renderMenu(items, x, y) {
             return false;
         };
         li.append(a);
-        ul.append(li);
+        fragment.append(li);
     }
+    ul.append(fragment);
 
     document.body.append(ul);
     ul.style.left = Math.max(Math.min(x, window.innerWidth + window.scrollX - ul.clientWidth), 0) + 'px';
