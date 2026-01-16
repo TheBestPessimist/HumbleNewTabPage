@@ -157,17 +157,26 @@ async function syncClosedTabs(reason) {
 async function syncDevices(reason) {
     try {
         const devices = await chrome.sessions.getDevices({ maxResults: 10 });
-        const deviceData = devices.map(device => {
-            const children = device.sessions.flatMap(session => {
+        const devLen = devices.length;
+        const deviceData = new Array(devLen);
+        for (let i = 0; i < devLen; i++) {
+            const device = devices[i];
+            const sessions = device.sessions;
+            const children = [];
+            for (let j = 0, sLen = sessions.length; j < sLen; j++) {
+                const session = sessions[j];
                 const tabs = session.window ? session.window.tabs : [session.tab];
-                return tabs.map(tab => ({ title: tab.title, url: tab.url }));
-            });
-            return {
+                for (let k = 0, tLen = tabs.length; k < tLen; k++) {
+                    const tab = tabs[k];
+                    children.push({ title: tab.title, url: tab.url });
+                }
+            }
+            deviceData[i] = {
                 id: `device.${device.deviceName}`,
                 title: device.deviceName,
                 children
             };
-        });
+        }
         await BookmarkCache.setSpecialFolder('devices', deviceData);
         console.log(`[Sessions] Cached ${deviceData.length} devices (reason: ${reason})`);
     } catch (error) {
