@@ -14,6 +14,7 @@ More hints:
 - do not pollute the code with needless or obvious comments. Cleanup redundant comments if they exists as well
 - think VERY HARD before making a change: does it improve something, or is it just change for the sake of change?
 - always prefer `template literal` instead of string concat. We're not in the fucking jungle here
+- NEVER refactor to use `charCodeAt` as it doesn't improve perf, instead it increases the code complexity TREMENDOUSLY
 - focus on performance:
     - Reducing DOM operations
     - Caching expensive lookups

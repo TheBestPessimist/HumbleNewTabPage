@@ -168,17 +168,16 @@ const BookmarkCache = {
      * @returns {Promise<void>}
      */
     async put(key, value) {
-        const record = {...value, key};
+        value.key = key;
         const db = await this.openDB();
         return new Promise((resolve, reject) => {
             const tx = db.transaction(this.STORE_NAME, 'readwrite');
             const store = tx.objectStore(this.STORE_NAME);
-            const request = store.put(record);
+            const request = store.put(value);
             request.onerror = () => reject(request.error);
             request.onsuccess = () => {
-                // Update cache in-place if it exists
                 if (this._allDataCache) {
-                    this._allDataCache.set(key, record);
+                    this._allDataCache.set(key, value);
                 }
                 resolve();
             };

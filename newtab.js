@@ -214,7 +214,7 @@ const Perf = {
 
         console.log(separator);
         console.log('END OF PERFORMANCE REPORT');
-        console.log(separator + '\n');
+        console.log(`${separator}\n`);
     }
 };
 
@@ -654,7 +654,7 @@ async function renderColumns() {
 
     // Create all column containers first (fast, synchronous)
     const columnCount = columns.length;
-    const columnWidth = (1 / columnCount) * 100 + '%';
+    const columnWidth = `${(1 / columnCount) * 100}%`;
     const columnElements = new Array(columnCount);
     for (let i = 0; i < columnCount; i++) {
         const column = document.createElement('div');
@@ -777,9 +777,9 @@ function addColumnHandlers(index, ul) {
 function getMenuItems(node) {
     const items = [{label: 'Open all links in folder', action: () => openLinks(node)}];
     if (node.id === 'closed')
-        items.push({label: 'Clear browsing data', action: () => openLink({url: 'chrome://settings/clearBrowserData'}, 1)});
+        items.push({label: 'Clear browsing data', action: () => openLink({url: `chrome://settings/clearBrowserData`}, 1)});
     if (node.id === 'devices')
-        items.push({label: 'History', action: () => openLink({url: 'chrome://history'}, 1)});
+        items.push({label: 'History', action: () => openLink({url: `chrome://history`}, 1)});
     if (+node.id > 0)
         items.push({label: 'Edit bookmarks', action: () => openLink({url: `chrome://bookmarks/?id=${node.id}`}, 1)});
     return items;
@@ -1102,7 +1102,7 @@ function getIcon(node) {
         icon.loading = 'lazy';
         icon.decoding = 'async';
         icon.src = url;
-        if (url2x) icon.srcset = url2x + ' 2x';
+        if (url2x) icon.srcset = `${url2x} 2x`;
     }
     icon.alt = ' ';
     return icon;
@@ -1115,12 +1115,11 @@ async function toggle(node, a) {
     a.open = !isopen;
 
     const openKey = `open.${node.id}`;
+    const autoClose = getConfig('auto_close');
     if (isopen) {
-        // close folder
         localStorage.removeItem(openKey);
         if (a.nextSibling) {
-            // auto-close child folders
-            if (getConfig('auto_close')) {
+            if (autoClose) {
                 const wrapper = a.nextSibling.tagName === 'DIV' ? a.nextSibling.firstChild : a.nextSibling;
                 const wrapperChildren = wrapper.children;
                 for (let i = 0, len = wrapperChildren.length; i < len; i++) {
@@ -1131,17 +1130,14 @@ async function toggle(node, a) {
             animate(node, a, isopen);
         }
     } else {
-        // open folder
         localStorage.setItem(openKey, true);
-        // auto-close sibling folders
-        if (getConfig('auto_close')) {
+        if (autoClose) {
             const siblings = a.parentNode.parentNode.children;
             for (let i = 0, len = siblings.length; i < len; i++) {
                 const sibling = siblings[i].firstChild;
                 if (sibling !== a && sibling?.open) sibling.onclick();
             }
         }
-        // open folder
         if (a.nextSibling) {
             animate(node, a, isopen);
         } else {
@@ -1210,12 +1206,8 @@ async function openLinks(node) {
 function openLink(node, newtab) {
     const {url} = node;
     if (!url) return;
-
-    if (newtab) {
-        window.open(url, '_blank');
-    } else {
-        window.location.href = url;
-    }
+    if (newtab) return void window.open(url, '_blank');
+    window.location.href = url;
 }
 
 let columns; // columns[x][y] = id
@@ -1742,8 +1734,8 @@ function initSettings() {
     const nav = document.getElementById('options_nav');
     let currentIndex = 0;
 
-    const sections = options.getElementsByClassName('section');
-    const navChildren = nav.children;
+    const sections = Array.from(options.getElementsByClassName('section'));
+    const navChildren = Array.from(nav.children);
     for (let i = 0, len = navChildren.length; i < len; i++) {
         const a = navChildren[i].firstChild;
         a.onclick = function () {

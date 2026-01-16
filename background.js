@@ -137,8 +137,8 @@ async function syncClosedTabs(reason) {
                 session.tab = session.window.tabs[0];
             }
             closed[i] = {
-                sessionId: session.window ? session.window.sessionId : session.tab.sessionId,
-                title: session.tab ? session.tab.title : `${session.window.tabs.length} Tabs`,
+                sessionId: session.window?.sessionId ?? session.tab.sessionId,
+                title: session.tab?.title ?? `${session.window.tabs.length} Tabs`,
                 url: session.tab?.url ?? null,
                 isWindow: !!session.window
             };
