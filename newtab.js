@@ -1675,7 +1675,12 @@ function initSettings() {
                     try {
                         const imported = JSON.parse(imports.value);
                         localStorage.clear();
-                        Object.entries(imported).forEach(([k, v]) => localStorage.setItem(k, v));
+                        // Use for loop for better performance
+                        const entries = Object.entries(imported);
+                        for (let i = 0, len = entries.length; i < len; i++) {
+                            const [k, v] = entries[i];
+                            localStorage.setItem(k, v);
+                        }
                         imports.value = '';
                         imports.placeholder = 'Import successful!';
                         exports.value = JSON.stringify(localStorage, replacer);
