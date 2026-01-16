@@ -478,7 +478,7 @@ async function getNode_internal(id) {
 
 // Helper to get config value (works before full config is loaded)
 function getConfigValue(key, defaultValue) {
-    const value = localStorage.getItem('options.' + key);
+    const value = localStorage.getItem(`options.${key}`);
     return value !== null ? Number(value) : defaultValue;
 }
 
