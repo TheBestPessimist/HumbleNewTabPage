@@ -1182,7 +1182,7 @@ function verifyColumns() {
 // Show error message when cache is unavailable
 function showCacheError(error) {
     const main = getMainElement();
-    main.innerHTML = '';
+    main.replaceChildren(); // Modern way to clear children
 
     const errorDiv = document.createElement('div');
     errorDiv.className = 'cache-error';
