@@ -18,7 +18,7 @@ require('fake-indexeddb/auto');
 // Use @webext-core/fake-browser for supported Chrome APIs
 const { fakeBrowser } = require('@webext-core/fake-browser');
 
-// Load themes (shared between early-styles.js and newtab.js)
+// Load themes (shared between prevent-white-flash.js and newtab.js)
 const themesModule = require('../themes.js');
 global.themes = themesModule || global.themes;
 

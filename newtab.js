@@ -1343,7 +1343,7 @@ function onChange(key, value) {
 
 // loads config settings
 function loadSettings() {
-    // Remove early-styles.js overrides so new settings can take effect
+    // Remove prevent-white-flash.js overrides so new settings can take effect
     document.getElementById('early-styles')?.remove();
     theme = themes[getConfig('theme')] ?? {};
     const configKeys = Object.keys(config);

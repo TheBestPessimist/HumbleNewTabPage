@@ -1,5 +1,5 @@
 /**
- * Theme definitions - shared between early-styles.js and newtab.js
+ * Theme definitions - shared between prevent-white-flash.js and newtab.js
  */
 
 'use strict';
