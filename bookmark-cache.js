@@ -326,7 +326,7 @@ const BookmarkCache = {
                 }
 
                 records.push({
-                    key: `folder:${node.id}`,
+                    key: 'folder:' + node.id,
                     value: {
                         id: node.id,
                         title: node.title,
@@ -443,7 +443,7 @@ const BookmarkCache = {
      * @returns {Promise<{data: Array, fresh: boolean}|null>} Cached data or null if expired/missing
      */
     async getSpecialFolder(specialId) {
-        const record = await this.get(`special:${specialId}`);
+        const record = await this.get('special:' + specialId);
         if (!record) return null;
 
         const ttl = this.SPECIAL_TTL[specialId];
@@ -460,7 +460,7 @@ const BookmarkCache = {
      * @returns {Promise<void>}
      */
     async setSpecialFolder(specialId, data) {
-        await this.put(`special:${specialId}`, {
+        await this.put('special:' + specialId, {
             data,
             cachedAt: Date.now()
         });
