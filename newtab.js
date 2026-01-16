@@ -984,10 +984,9 @@ function getDropY(target, event) {
     if (target.tagName !== 'LI' && target.tagName !== 'UL') return null;
     let y = isAbove(event.pageY, target) ? 1 : 0;
     if (target.tagName === 'LI') {
-        while (target.previousSibling) {
-            y++;
-            target = target.previousSibling;
-        }
+        // Use Array.prototype.indexOf for O(1) lookup instead of O(n) sibling traversal
+        const siblings = target.parentNode.children;
+        y += Array.prototype.indexOf.call(siblings, target);
     }
     return y;
 }
