@@ -1358,14 +1358,15 @@ async function loadColumns() {
 
 // saves current column configuration to storage
 function saveColumns() {
-    // clear previous config
-    forEachColumnEntry((x, y) => localStorage.removeItem(`column.${x}.${y}`));
+    // clear previous config - forEachColumnEntry already uses string concat
+    forEachColumnEntry((x, y) => localStorage.removeItem('column.' + x + '.' + y));
     verifyColumns();
-    // save new config - use for loops for better performance
+    // save new config - use string concat for better performance
     for (let x = 0, xLen = columns.length; x < xLen; x++) {
         const col = columns[x];
+        const rowPrefix = 'column.' + x + '.';
         for (let y = 0, yLen = col.length; y < yLen; y++) {
-            localStorage.setItem(`column.${x}.${y}`, col[y]);
+            localStorage.setItem(rowPrefix + y, col[y]);
         }
     }
     loadColumns();
