@@ -1525,7 +1525,7 @@ function setConfig(key, value) {
     // Invalidate cache for this key
     configCache.delete(key);
 
-    const storageKey = 'options.' + key;
+    const storageKey = `options.${key}`;
     if (value != null) {
         localStorage.setItem(storageKey, typeof config[key] === 'number' ? Number(value) : value);
     } else {
@@ -1534,8 +1534,7 @@ function setConfig(key, value) {
     }
 
     // special case settings
-    // Use charCodeAt for faster prefix check than startsWith
-    if (key === 'lock' || key === 'newtab' || key === 'show_root' || key.charCodeAt(0) === 110) { // 'n' for 'number'
+    if (key === 'lock' || key === 'newtab' || key === 'show_root' || key.startsWith('number')) {
         loadColumns();
     } else if (key === 'theme') {
         theme = themes[value];
@@ -1548,7 +1547,7 @@ function setConfig(key, value) {
                 showConfig(k);
             }
         }
-    } else if (key.charCodeAt(0) === 115 && key.charCodeAt(1) === 104) { // 's' and 'h' for 'show'
+    } else if (key.startsWith('show')) {
         const id = key.slice(5);
         if (!value && coords[id]) {
             removeRow(coords[id].x, coords[id].y);
