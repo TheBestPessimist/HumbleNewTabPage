@@ -1186,9 +1186,10 @@ function verifyColumns() {
         if (columns[x].length === 0) {
             columns.splice(x, 1);
         } else {
-            columns[x].forEach((id, y) => {
-                coords[id] = {x, y};
-            });
+            const col = columns[x];
+            for (let y = 0, len = col.length; y < len; y++) {
+                coords[col[y]] = {x, y};
+            }
         }
     }
 }
