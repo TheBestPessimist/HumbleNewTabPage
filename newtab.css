@@ -17,6 +17,7 @@ body {
 	max-width: 100%;
 	white-space: nowrap;
 	user-select: none;
+	touch-action: manipulation;
 }
 #main ul, .menu {
 	margin: 0;
