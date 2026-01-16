@@ -139,20 +139,22 @@ const Perf = {
         if (this.cacheCalls.calls.length > 0) {
             console.log('\n💾 INDEXEDDB CACHE CALLS:');
             const sorted = this.cacheCalls.calls.toSorted((a, b) => b.duration - a.duration);
-            sorted.forEach(c => {
+            for (let i = 0, len = sorted.length; i < len; i++) {
+                const c = sorted[i];
                 const bar = '█'.repeat(Math.min(Math.ceil(c.duration / 10), 50));
                 console.log(`  ${c.duration.toFixed(1).padStart(7)}ms | ${bar} | ${c.api}`);
-            });
+            }
         }
 
         // Chrome API breakdown
         if (this.apiCalls.calls.length > 0) {
             console.log('\n🔌 CHROME API CALLS (special folders only, after first paint):');
             const sorted = this.apiCalls.calls.toSorted((a, b) => b.duration - a.duration);
-            sorted.forEach(c => {
+            for (let i = 0, len = sorted.length; i < len; i++) {
+                const c = sorted[i];
                 const bar = '█'.repeat(Math.min(Math.ceil(c.duration / 10), 50));
                 console.log(`  ${c.duration.toFixed(1).padStart(7)}ms | ${bar} | ${c.api}`);
-            });
+            }
         }
 
         // Diagnosis
