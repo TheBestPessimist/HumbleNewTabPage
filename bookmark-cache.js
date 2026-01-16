@@ -148,15 +148,14 @@ const BookmarkCache = {
         const len = folderIds.length;
         const keys = new Array(len);
         for (let i = 0; i < len; i++) {
-            keys[i] = 'folder:' + folderIds[i];
+            keys[i] = `folder:${folderIds[i]}`;
         }
         const records = await this.getMany(keys);
         const result = new Map();
-        // Iterate over folderIds to avoid Map iterator overhead
+        // Reuse keys array to avoid duplicate string construction
         for (let i = 0; i < len; i++) {
-            const folderId = folderIds[i];
-            const value = records.get('folder:' + folderId);
-            if (value) result.set(folderId, value);
+            const value = records.get(keys[i]);
+            if (value) result.set(folderIds[i], value);
         }
         return result;
     },
