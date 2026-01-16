@@ -791,11 +791,13 @@ function renderMenu(items, x, y) {
 
     // Use DocumentFragment to batch DOM operations
     const fragment = document.createDocumentFragment();
-    for (let i = 0, len = items.length; i < len; i++) {
+    const len = items.length;
+    const lastIndex = len - 1;
+    for (let i = 0; i < len; i++) {
         const item = items[i];
         if (!item) {
             // Spacer - only add if not at start or end
-            if (i > 0 && i < len - 1) {
+            if (i > 0 && i < lastIndex) {
                 const li = document.createElement('li');
                 li.append(document.createElement('hr'));
                 fragment.append(li);
