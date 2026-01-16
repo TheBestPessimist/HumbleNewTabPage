@@ -1506,13 +1506,11 @@ function getConfig(key) {
     const cached = configCache.get(key);
     if (cached !== undefined) return cached;
 
-    const storageKey = 'options.' + key;
-    const value = localStorage.getItem(storageKey);
+    const value = localStorage.getItem(`options.${key}`);
     let result;
     if (value != null) {
         // Dynamic show_* keys (e.g., show_2, show_4) are numbers but not in config
-        // Use charCodeAt for faster prefix check than startsWith
-        const isShowKey = key.charCodeAt(0) === 115 && key.charCodeAt(4) === 95; // 's' and '_' for 'show_'
+        const isShowKey = key.startsWith('show_');
         const isNumber = typeof config[key] === 'number' || (isShowKey && !(key in config));
         result = isNumber ? Number(value) : value;
     } else {
