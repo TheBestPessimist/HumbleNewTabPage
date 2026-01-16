@@ -1155,6 +1155,7 @@ function animate(node, a, isopen) {
     // TODO: fix nested animations
     // wrapper needed for inner height value
     let wrap = a.nextSibling;
+    const inner = wrap.firstChild; // Cache firstChild reference
     if (a.animationHandle) {
         // clear last animation
         clearTimeout(a.animationHandle);
@@ -1162,7 +1163,7 @@ function animate(node, a, isopen) {
     } else {
         // start animation
         Object.assign(wrap.style, {
-            height: isopen ? wrap.firstChild.clientHeight + 'px' : '0',
+            height: isopen ? inner.clientHeight + 'px' : '0',
             opacity: isopen ? '1' : '0'
         });
     }
@@ -1172,7 +1173,7 @@ function animate(node, a, isopen) {
             if (wrap) {
                 wrap.className = 'wrap';
                 Object.assign(wrap.style, {
-                    height: isopen ? '0' : wrap.firstChild.clientHeight + 'px',
+                    height: isopen ? '0' : inner.clientHeight + 'px',
                     opacity: isopen ? '0' : '1',
                     pointerEvents: isopen ? 'none' : null
                 });
