@@ -246,7 +246,7 @@ const SpecialFolders = {
     // Fetch children data for a special folder
     // ONLY reads from IndexedDB cache - no Chrome API fallback
     // Exception: 'top' sites must be fetched here (SW can't access chrome.topSites)
-    async fetchChildren(id) {
+    async fetchChildrenOfSpecialFolder(id) {
         const def = this.defs[id];
         if (!def?.isFolder) return [];
         const limit = getConfigValue(def.configKey, 10);
@@ -417,7 +417,7 @@ function forEachColumnEntry(fn) {
 async function getChildren_internal(id) {
     // Special folders use Chrome APIs (fetched fresh each time)
     if (SpecialFolders.isFolder(id)) {
-        return SpecialFolders.fetchChildren(id);
+        return SpecialFolders.fetchChildrenOfSpecialFolder(id);
     }
 
     // Regular bookmarks: load from BookmarkCache (uses in-memory cache)
@@ -1165,7 +1165,6 @@ function showCacheError(error) {
             <li>There was an error syncing bookmarks</li>
         </ul>
         <p>Check the console for more details.</p>
-        <button onclick="location.reload()">Retry</button>
     `;
     main.appendChild(errorDiv);
 

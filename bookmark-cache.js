@@ -2,14 +2,14 @@
 
 /**
  * IndexedDB-based bookmark cache for fast bookmark loading.
- * 
+ *
  * Database structure:
  * - Store: 'folders' with keyPath 'key'
- * - Records: 
+ * - Records:
  *   - 'folder:{id}' → { key, id, title, parentId, children: [...] }
  *   - 'meta:version' → { key, value: number }
  *   - 'meta:lastSync' → { key, value: timestamp }
- * 
+ *
  * This module is used by both:
  * - background.js (service worker) - writes to cache
  * - newtab.js - reads from cache only
@@ -46,7 +46,7 @@ const BookmarkCache = {
             request.onupgradeneeded = (event) => {
                 const db = event.target.result;
                 if (!db.objectStoreNames.contains(this.STORE_NAME)) {
-                    db.createObjectStore(this.STORE_NAME, { keyPath: 'key' });
+                    db.createObjectStore(this.STORE_NAME, {keyPath: 'key'});
                 }
             };
 
@@ -101,21 +101,7 @@ const BookmarkCache = {
      * @returns {Promise<any>}
      */
     async get(key) {
-        // Try in-memory cache first
-        if (this._allDataCache) {
-            return this._allDataCache.get(key);
-        }
-
-        console.log('[BookmarkCache] get: cache miss, falling back to IndexedDB for key ', key);
-
-        const db = await this.openDB();
-        return new Promise((resolve, reject) => {
-            const tx = db.transaction(this.STORE_NAME, 'readonly');
-            const store = tx.objectStore(this.STORE_NAME);
-            const request = store.get(key);
-            request.onerror = () => reject(request.error);
-            request.onsuccess = () => resolve(request.result);
-        });
+        return (await this.getMany([key])).get(key);
     },
 
     /**
@@ -125,45 +111,19 @@ const BookmarkCache = {
      */
     async getMany(keys) {
         // Try in-memory cache first
-        if (this._allDataCache) {
-            const start = performance.now();
-            const results = new Map();
-            for (const key of keys) {
-                const value = this._allDataCache.get(key);
-                if (value) results.set(key, value);
-            }
-            const duration = performance.now() - start;
-            if (duration > 1) {
-                console.log('[BookmarkCache] getMany: in-memory lookup took', duration.toFixed(2), 'ms for', keys.length, 'keys');
-            }
-            return results;
+        if (!this._allDataCache) await this.loadAllData()
+
+        const start = performance.now();
+        const results = new Map();
+        for (const key of keys) {
+            const value = this._allDataCache.get(key);
+            if (value) results.set(key, value);
         }
-
-        console.log('[BookmarkCache] getMany: cache miss, falling back to IndexedDB for', keys.length, 'keys');
-        const db = await this.openDB();
-        return new Promise((resolve, reject) => {
-            const tx = db.transaction(this.STORE_NAME, 'readonly');
-            const store = tx.objectStore(this.STORE_NAME);
-            const results = new Map();
-            let pending = keys.length;
-
-            if (pending === 0) {
-                resolve(results);
-                return;
-            }
-
-            keys.forEach(key => {
-                const request = store.get(key);
-                request.onerror = () => reject(request.error);
-                request.onsuccess = () => {
-                    if (request.result) {
-                        results.set(key, request.result);
-                    }
-                    pending--;
-                    if (pending === 0) resolve(results);
-                };
-            });
-        });
+        const duration = performance.now() - start;
+        if (duration > 1) {
+            console.log('[BookmarkCache] getMany: in-memory lookup took', duration.toFixed(2), 'ms for', keys.length, 'keys');
+        }
+        return results;
     },
 
     /**
@@ -199,14 +159,20 @@ const BookmarkCache = {
      * @returns {Promise<void>}
      */
     async put(key, value) {
-        const record = { ...value, key };
+        const record = {...value, key};
         const db = await this.openDB();
         return new Promise((resolve, reject) => {
             const tx = db.transaction(this.STORE_NAME, 'readwrite');
             const store = tx.objectStore(this.STORE_NAME);
             const request = store.put(record);
             request.onerror = () => reject(request.error);
-            request.onsuccess = () => resolve();
+            request.onsuccess = () => {
+                // Update cache in-place if it exists
+                if (this._allDataCache) {
+                    this._allDataCache.set(key, record);
+                }
+                resolve();
+            };
         });
     },
 
@@ -222,10 +188,18 @@ const BookmarkCache = {
             const store = tx.objectStore(this.STORE_NAME);
 
             tx.onerror = () => reject(tx.error);
-            tx.oncomplete = () => resolve();
+            tx.oncomplete = () => {
+                // Update cache in-place if it exists
+                if (this._allDataCache) {
+                    records.forEach(({key, value}) => {
+                        this._allDataCache.set(key, {...value, key});
+                    });
+                }
+                resolve();
+            };
 
-            records.forEach(({ key, value }) => {
-                store.put({ ...value, key });
+            records.forEach(({key, value}) => {
+                store.put({...value, key});
             });
         });
     },
@@ -242,14 +216,21 @@ const BookmarkCache = {
             const store = tx.objectStore(this.STORE_NAME);
 
             tx.onerror = () => reject(tx.error);
-            tx.oncomplete = () => resolve();
+            tx.oncomplete = () => {
+                // Rebuild cache from the records we just wrote
+                this._allDataCache = new Map();
+                records.forEach(({key, value}) => {
+                    this._allDataCache.set(key, {...value, key});
+                });
+                resolve();
+            };
 
             // Clear all existing data first
             store.clear();
 
             // Then add all new records
-            records.forEach(({ key, value }) => {
-                store.put({ ...value, key });
+            records.forEach(({key, value}) => {
+                store.put({...value, key});
             });
         });
     },
@@ -260,18 +241,15 @@ const BookmarkCache = {
      */
     async getCacheStatus() {
         try {
-            const [versionRecord, syncRecord] = await Promise.all([
-                this.get('meta:version'),
-                this.get('meta:lastSync')
-            ]);
-
+            const versionRecord = await this.get('meta:version');
+            const syncRecord = await this.get('meta:lastSync');
             const version = versionRecord?.value ?? null;
             const lastSync = syncRecord?.value ?? null;
             const valid = version === this.CACHE_VERSION && lastSync !== null;
 
-            return { valid, lastSync, version };
+            return {valid, lastSync, version};
         } catch (e) {
-            return { valid: false, lastSync: null, version: null };
+            return {valid: false, lastSync: null, version: null};
         }
     },
 
@@ -288,7 +266,11 @@ const BookmarkCache = {
             const store = tx.objectStore(this.STORE_NAME);
             const request = store.clear();
             request.onerror = () => reject(request.error);
-            request.onsuccess = () => resolve();
+            request.onsuccess = () => {
+                // Clear the cache too
+                this._allDataCache = new Map();
+                resolve();
+            };
         });
     },
 
@@ -322,7 +304,7 @@ const BookmarkCache = {
                     title: child.title,
                     url: child.url,
                     // Mark as folder if no url
-                    ...(child.url ? {} : { isFolder: true })
+                    ...(child.url ? {} : {isFolder: true})
                 }));
 
                 records.push({
@@ -371,17 +353,17 @@ const BookmarkCache = {
         const now = Date.now();
         const allRecords = [
             ...folderRecords,
-            { key: 'meta:version', value: { value: this.CACHE_VERSION } },
-            { key: 'meta:lastSync', value: { value: now } },
+            {key: 'meta:version', value: {value: this.CACHE_VERSION}},
+            {key: 'meta:lastSync', value: {value: now}},
             // Pre-cache recent bookmarks (no TTL needed - refreshed on every sync)
-            { key: 'special:recent', value: { data: recentBookmarks, cachedAt: now } }
+            {key: 'special:recent', value: {data: recentBookmarks, cachedAt: now}}
         ];
 
         // Replace all data atomically
         await this.replaceAll(allRecords);
 
         const syncTime = performance.now() - startTime;
-        return { folderCount: folderRecords.length, syncTime };
+        return {folderCount: folderRecords.length, syncTime};
     },
 
     // =========================================================================
@@ -440,7 +422,7 @@ const BookmarkCache = {
         const age = Date.now() - (record.cachedAt || 0);
         const fresh = age < ttl;
 
-        return { data: record.data || [], fresh };
+        return {data: record.data || [], fresh};
     },
 
     /**
