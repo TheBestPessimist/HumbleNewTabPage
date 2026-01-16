@@ -307,13 +307,19 @@ const BookmarkCache = {
         function processNode(node, parentId = null) {
             // Only process folders (nodes without url)
             if (!node.url) {
-                const children = (node.children || []).map(child => ({
-                    id: child.id,
-                    title: child.title,
-                    url: child.url,
-                    // Mark as folder if no url
-                    ...(child.url ? {} : {isFolder: true})
-                }));
+                const nodeChildren = node.children || [];
+                const childLen = nodeChildren.length;
+                const children = new Array(childLen);
+                for (let j = 0; j < childLen; j++) {
+                    const child = nodeChildren[j];
+                    children[j] = {
+                        id: child.id,
+                        title: child.title,
+                        url: child.url,
+                        // Mark as folder if no url
+                        ...(child.url ? {} : {isFolder: true})
+                    };
+                }
 
                 records.push({
                     key: `folder:${node.id}`,
@@ -326,8 +332,8 @@ const BookmarkCache = {
                 });
 
                 // Recursively process child folders
-                for (let i = 0; i < (node.children || []).length; i++){
-                    const child = (node.children || [])[i];
+                for (let i = 0; i < childLen; i++) {
+                    const child = nodeChildren[i];
                     if (!child.url) {
                         processNode(child, node.id);
                     }
