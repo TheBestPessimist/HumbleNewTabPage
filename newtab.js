@@ -397,7 +397,13 @@ async function getFoldersFromCache(ids) {
 async function getRootFolderIds() {
     const folder = await BookmarkCache.getFolder('0');
     if (!folder?.children) return [];
-    return folder.children.filter(c => c.isFolder).map(c => c.id);
+    const children = folder.children;
+    const result = [];
+    for (let i = 0, len = children.length; i < len; i++) {
+        const c = children[i];
+        if (c.isFolder) result.push(c.id);
+    }
+    return result;
 }
 
 // Iterate over column storage entries, calling fn(x, y, id) for each
