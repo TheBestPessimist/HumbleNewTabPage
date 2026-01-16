@@ -1062,13 +1062,13 @@ async function getSubTree(id) {
     return [];
 }
 
-// sets css classes for node - build class string directly (avoid array allocation)
+// sets css classes for node - build class string directly
 function setClass(target, node, isopen) {
     let className = node.className || '';
-    if (node.children) className += (className ? ' folder' : 'folder');
-    if (isopen) className += (className ? ' open' : 'open');
+    if (node.children) className = className ? `${className} folder` : 'folder';
+    if (isopen) className = className ? `${className} open` : 'open';
     if (SpecialFolders.isSpecial(node.id) || node.id === 'empty') {
-        className += (className ? ' ' : '') + node.id;
+        className = className ? `${className} ${node.id}` : node.id;
     }
     if (className) target.className = className;
 }
