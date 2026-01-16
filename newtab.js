@@ -585,10 +585,16 @@ async function renderColumn(index, target) {
     });
 }
 
+// Cached DOM element references (avoid repeated getElementById calls)
+let mainElement = null;
+function getMainElement() {
+    return mainElement || (mainElement = document.getElementById('main'));
+}
+
 // render all columns to main div
 async function renderColumns() {
     Perf.mark('renderColumns start');
-    const target = document.getElementById('main');
+    const target = getMainElement();
     target.replaceChildren(); // Modern way to clear children
 
     // Create all column containers first (fast, synchronous)
@@ -812,7 +818,7 @@ function enableDragFolder(node, a) {
 
 // init drag and drop handlers
 function enableDragDrop() {
-    const main = document.getElementById('main');
+    const main = getMainElement();
 
     if (getConfig('lock')) {
         main.ondragover = main.ondragleave = main.ondrop = null;
@@ -1170,7 +1176,7 @@ function verifyColumns() {
 
 // Show error message when cache is unavailable
 function showCacheError(error) {
-    const main = document.getElementById('main');
+    const main = getMainElement();
     main.innerHTML = '';
 
     const errorDiv = document.createElement('div');
