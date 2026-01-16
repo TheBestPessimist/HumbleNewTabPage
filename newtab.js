@@ -1511,7 +1511,9 @@ function getConfig(key) {
     let result;
     if (value != null) {
         // Dynamic show_* keys (e.g., show_2, show_4) are numbers but not in config
-        const isNumber = typeof config[key] === 'number' || (key.startsWith('show_') && !(key in config));
+        // Use charCodeAt for faster prefix check than startsWith
+        const isShowKey = key.charCodeAt(0) === 115 && key.charCodeAt(4) === 95; // 's' and '_' for 'show_'
+        const isNumber = typeof config[key] === 'number' || (isShowKey && !(key in config));
         result = isNumber ? Number(value) : value;
     } else {
         result = key in theme ? theme[key] : config[key];
