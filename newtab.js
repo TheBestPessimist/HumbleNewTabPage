@@ -317,15 +317,21 @@ const SpecialFolders = {
     // Hydrate cached data with runtime properties (action callbacks, className)
     _hydrateData(id, data) {
         if (id === 'closed') {
-            return data.map(item => ({
-                ...item,
-                className: item.isWindow ? 'window' : null,
-                action: () => {
-                    chrome.sessions.restore(item.sessionId);
-                    refreshClosed();
-                    return false;
-                }
-            }));
+            const len = data.length;
+            const result = new Array(len);
+            for (let i = 0; i < len; i++) {
+                const item = data[i];
+                result[i] = {
+                    ...item,
+                    className: item.isWindow ? 'window' : null,
+                    action: () => {
+                        chrome.sessions.restore(item.sessionId);
+                        refreshClosed();
+                        return false;
+                    }
+                };
+            }
+            return result;
         }
         // 'top', 'recent', 'devices' don't need hydration
         return data;
