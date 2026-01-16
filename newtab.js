@@ -1304,7 +1304,7 @@ async function loadColumns() {
     } else {
         Perf.mark('loadColumns: fetching root IDs from cache');
         const rootIds = await getRootFolderIds();
-        root = [...special, ...rootIds];
+        root = special.concat(rootIds);
         verifyColumns();
         await renderColumns();
     }
