@@ -547,7 +547,7 @@ function render(node, target) {
         }
 
         // Check if folder should be open
-        const shouldBeOpen = a.open || (getConfig('remember_open') && localStorage.getItem(`open.${id}`));
+        const shouldBeOpen = a.open || (getConfig('remember_open') && localStorage.getItem('open.' + id));
         if (shouldBeOpen) {
             setClass(a, node, true);
             a.open = true;
@@ -1110,9 +1110,10 @@ async function toggle(node, a) {
     setClass(a, node, !isopen);
     a.open = !isopen;
 
+    const openKey = 'open.' + node.id;
     if (isopen) {
         // close folder
-        localStorage.removeItem(`open.${node.id}`);
+        localStorage.removeItem(openKey);
         if (a.nextSibling) {
             // auto-close child folders
             if (getConfig('auto_close')) {
@@ -1127,7 +1128,7 @@ async function toggle(node, a) {
         }
     } else {
         // open folder
-        localStorage.setItem(`open.${node.id}`, true);
+        localStorage.setItem(openKey, true);
         // auto-close sibling folders
         if (getConfig('auto_close')) {
             const siblings = a.parentNode.parentNode.children;
