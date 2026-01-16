@@ -498,9 +498,7 @@ function render(node, target) {
         a.tabIndex = 0;
     }
 
-    let text = node.title || node.name || '';
-    if (!text && node.title === null) text = url || '';
-    a.textContent = text;
+    a.textContent = node.title ?? node.name ?? url ?? '';
 
     if (node.tooltip) a.title = node.tooltip;
     setClass(a, node);
