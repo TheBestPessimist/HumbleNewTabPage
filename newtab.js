@@ -1536,7 +1536,8 @@ function setConfig(key, value) {
     }
 
     // special case settings
-    if (key === 'lock' || key === 'newtab' || key === 'show_root' || key.startsWith('number')) {
+    // Use charCodeAt for faster prefix check than startsWith
+    if (key === 'lock' || key === 'newtab' || key === 'show_root' || key.charCodeAt(0) === 110) { // 'n' for 'number'
         loadColumns();
     } else if (key === 'theme') {
         theme = themes[value];
