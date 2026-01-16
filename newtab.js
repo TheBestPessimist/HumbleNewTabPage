@@ -622,17 +622,24 @@ async function renderColumns() {
     target.replaceChildren(); // Modern way to clear children
 
     // Create all column containers first (fast, synchronous)
-    const columnElements = columns.map((_, i) => {
+    const columnCount = columns.length;
+    const columnWidth = `${(1 / columnCount) * 100}%`;
+    const columnElements = new Array(columnCount);
+    for (let i = 0; i < columnCount; i++) {
         const column = document.createElement('div');
         column.className = 'column';
-        column.style.width = `${(1 / columns.length) * 100}%`;
+        column.style.width = columnWidth;
         enableDragColumn(i, column);
-        target.append(column); // Modern API
-        return column;
-    });
+        target.append(column);
+        columnElements[i] = column;
+    }
 
     // Render all columns in parallel and wait for completion
-    await Promise.all(columnElements.map((column, i) => renderColumn(i, column)));
+    const renderPromises = new Array(columnCount);
+    for (let i = 0; i < columnCount; i++) {
+        renderPromises[i] = renderColumn(i, columnElements[i]);
+    }
+    await Promise.all(renderPromises);
 
     enableDragDrop();
 }
