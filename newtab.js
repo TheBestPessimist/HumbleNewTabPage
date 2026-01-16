@@ -1126,7 +1126,9 @@ function animate(node, a, isopen) {
 // opens immediate children of given node in new tabs
 async function openLinks(node) {
     const result = await getChildren(node);
-    result.forEach(child => openLink(child, 2));
+    for (let i = 0, len = result.length; i < len; i++) {
+        openLink(result[i], 2);
+    }
 }
 
 // opens given node
