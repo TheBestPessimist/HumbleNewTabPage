@@ -105,7 +105,6 @@ const SpecialFolders = {
 
 // Convenience references
 const special = SpecialFolders.all;
-// Use for loop for better performance
 const specialFolderIds = [];
 for (let i = 0, len = special.length; i < len; i++) {
     const id = special[i];
@@ -188,7 +187,6 @@ async function getChildren_internal(id) {
         cacheLoadError = e;
     }
 
-    // Mark folders (items with isFolder flag) - use for loop for performance
     for (let i = 0, len = children.length; i < len; i++) {
         if (children[i].isFolder) children[i].children = true;
     }
@@ -304,7 +302,6 @@ function renderAll(nodes, target, toplevel) {
     const fragment = document.createDocumentFragment();
     const ul = document.createElement('ul');
 
-    // Use for loop instead of forEach for better performance in hot path
     for (let i = 0, len = nodes.length; i < len; i++) {
         const node = nodes[i];
         // skip extensions and duplicated child folders
@@ -397,8 +394,6 @@ async function expandDeferredFolders() {
     const deferredLinks = document.querySelectorAll('#main a.folder[data-deferred="true"]');
     const linkCount = deferredLinks.length;
     if (linkCount === 0) return;
-
-    console.log(`[expandDeferredFolders] Loading ${linkCount} special folders`);
 
     const promises = new Array(linkCount);
     for (let i = 0; i < linkCount; i++) {
@@ -962,7 +957,6 @@ function verifyColumns() {
         if (!existing.has(id)) missing.push(id);
     }
 
-    // add missing root items - use for loop for performance
     for (let i = 0, len = missing.length; i < len; i++) {
         const id = missing[i];
         if (getConfig(`show_${id}`)) {
@@ -1146,7 +1140,6 @@ function refreshClosed() {
     }
 
     getChildren({id: 'closed'}).then(result => {
-        // Use for loop for better performance
         for (let i = 0, len = targets.length; i < len; i++) {
             renderAll(result, targets[i]);
         }
@@ -1200,7 +1193,6 @@ let theme = {};
 // Config value cache - avoids repeated localStorage reads during rendering
 const configCache = new Map();
 
-// get config value or default (uses cache for performance)
 function getConfig(key) {
     // Use single get() call instead of has() + get() to avoid double lookup
     const cached = configCache.get(key);
@@ -1473,7 +1465,6 @@ function initSettings() {
                     try {
                         const imported = JSON.parse(imports.value);
                         localStorage.clear();
-                        // Use for loop for better performance
                         const entries = Object.entries(imported);
                         for (let i = 0, len = entries.length; i < len; i++) {
                             const [k, v] = entries[i];
@@ -1484,7 +1475,6 @@ function initSettings() {
                         exports.value = JSON.stringify(localStorage, replacer);
                         loadSettings();
                         loadColumns();
-                        // Use for loop for better performance
                         const configKeys = Object.keys(config);
                         for (let i = 0, len = configKeys.length; i < len; i++) {
                             showConfig(configKeys[i]);
@@ -1503,7 +1493,6 @@ function initSettings() {
     BookmarkCache.getFolder('0').then(async rootFolder => {
         const placeholder = document.getElementById('options_show_bookmarks');
         const children = rootFolder?.children || [];
-        // Use for loop for better performance
         for (let i = 0, len = children.length; i < len; i++) {
             const node = children[i];
             if (!node.isFolder) continue;
@@ -1531,7 +1520,6 @@ function initSettings() {
             fontInput.replaceWith(select); // Modern API
         }
 
-        // show settings - use for loop for better performance
         const configKeys = Object.keys(config);
         for (let i = 0, len = configKeys.length; i < len; i++) {
             initConfig(configKeys[i]);
@@ -1581,7 +1569,6 @@ function showOptions(show) {
     document.getElementById('options').style.display = show ? 'block' : 'none';
     if (show) {
         if (!settingsInitialized) initSettings();
-        // Use for loop for better performance
         const configKeys = Object.keys(config);
         for (let i = 0, len = configKeys.length; i < len; i++) {
             showConfig(configKeys[i]);

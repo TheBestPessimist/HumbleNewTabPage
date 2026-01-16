@@ -88,11 +88,6 @@ function setupDOM() {
 }
 
 function setupGlobals() {
-    // Mock performance API methods not available in jsdom
-    if (!global.performance.getEntriesByType) {
-        global.performance.getEntriesByType = () => [];
-    }
-
     // Start with fakeBrowser for supported APIs (tabs, storage, runtime, etc.)
     // Then add custom implementations for unsupported APIs
     global.chrome = {

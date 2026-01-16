@@ -2,10 +2,6 @@
 // This runs before body renders, reading from localStorage
 // Requires themes.js to be loaded first
 (function() {
-    // Performance: Record when this script runs (relative to navigation start)
-    window.__earlyStylesTime = performance.now();
-    console.log('[PERF:EARLY] prevent-white-flash.js running at: ' + window.__earlyStylesTime.toFixed(2) + 'ms after navigation');
-
     const themeName = localStorage.getItem('options.theme');
     const theme = themes[themeName] || {};
     const bgColor = localStorage.getItem('options.background_color') || theme.background_color || '#ffffff';

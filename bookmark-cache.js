@@ -74,7 +74,6 @@ const BookmarkCache = {
             return this._allDataCache;
         }
 
-        const start = performance.now();
         const db = await this.openDB();
         return new Promise((resolve, reject) => {
             const tx = db.transaction(this.STORE_NAME, 'readonly');
@@ -90,8 +89,6 @@ const BookmarkCache = {
                     cache.set(record.key, record);
                 }
                 this._allDataCache = cache;
-                const duration = performance.now() - start;
-                console.log(`[BookmarkCache] loadAllData: loaded ${cache.size} records in ${duration.toFixed(2)}ms`);
                 resolve(cache);
             };
         });
@@ -115,16 +112,11 @@ const BookmarkCache = {
         // Try in-memory cache first
         if (!this._allDataCache) await this.loadAllData()
 
-        const start = performance.now();
         const results = new Map();
         for (let i = 0, len = keys.length; i < len; i++) {
             const key = keys[i];
             const value = this._allDataCache.get(key);
             if (value) results.set(key, value);
-        }
-        const duration = performance.now() - start;
-        if (duration > 1) {
-            console.log('[BookmarkCache] getMany: in-memory lookup took', duration.toFixed(2), 'ms for', keys.length, 'keys');
         }
         return results;
     },
@@ -206,7 +198,6 @@ const BookmarkCache = {
                 resolve();
             };
 
-            // Use for loop for better performance
             for (let i = 0, len = records.length; i < len; i++) {
                 const {key, value} = records[i];
                 store.put({...value, key});
@@ -239,7 +230,6 @@ const BookmarkCache = {
             // Clear all existing data first
             store.clear();
 
-            // Then add all new records - use for loop for performance
             for (let i = 0, len = records.length; i < len; i++) {
                 const {key, value} = records[i];
                 store.put({...value, key});
@@ -360,8 +350,6 @@ const BookmarkCache = {
      * @returns {Promise<{folderCount: number, syncTime: number}>}
      */
     async fullSync() {
-        const startTime = performance.now();
-
         // Get the full bookmark tree
         const tree = await chrome.bookmarks.getTree();
 
@@ -384,8 +372,7 @@ const BookmarkCache = {
         // Replace all data atomically
         await this.replaceAll(allRecords);
 
-        const syncTime = performance.now() - startTime;
-        return {folderCount: folderRecords.length, syncTime};
+        return folderRecords.length;
     },
 
     // =========================================================================
