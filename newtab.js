@@ -42,7 +42,7 @@ const SpecialFolders = {
     async fetchChildrenOfSpecialFolder(id) {
         const def = this.defs[id];
         if (!def?.isFolder) return [];
-        const limit = getConfigValue(def.configKey, 10);
+        const limit = getConfig(def.configKey);
 
         // 'top' is special - SW can't cache it, so we fetch and cache here
         if (id === 'top') {
@@ -202,12 +202,6 @@ async function getNode_internal(id) {
         return {id: folder.id, title: folder.title, parentId: folder.parentId};
     }
     return null;
-}
-
-// Helper to get config value (works before full config is loaded)
-function getConfigValue(key, defaultValue) {
-    const value = localStorage.getItem(`options.${key}`);
-    return value !== null ? Number(value) : defaultValue;
 }
 
 // render a single bookmark node
@@ -1632,7 +1626,6 @@ if (typeof module !== 'undefined' && module.exports) {
             return ids;
         },
         getChildren_internal,
-        getConfigValue,
         special,
         expandDeferredFolders,
         render,
