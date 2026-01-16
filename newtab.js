@@ -808,10 +808,8 @@ function renderMenu(items, x, y) {
         const a = document.createElement('a');
         a.textContent = item.label;
         a.tabIndex = 0;
-        a.onclick = () => {
-            item.action();
-            return false;
-        };
+        const action = item.action;
+        a.onclick = () => { action(); return false; };
         li.append(a);
         fragment.append(li);
     }
