@@ -587,7 +587,8 @@ function renderAll(nodes, target, toplevel) {
         // skip extensions and duplicated child folders
         if (toplevel || !coords[node.id]) render(node, ul);
     }
-    if (ul.childNodes.length === 0) {
+    // Use firstChild check instead of childNodes.length (faster)
+    if (!ul.firstChild) {
         render({id: 'empty', title: '< Empty >'}, ul);
     }
     if (toplevel) {
