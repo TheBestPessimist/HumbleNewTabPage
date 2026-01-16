@@ -84,7 +84,9 @@ const BookmarkCache = {
             request.onerror = () => reject(request.error);
             request.onsuccess = () => {
                 const cache = new Map();
-                for (const record of request.result) {
+                const records = request.result;
+                for (let i = 0, len = records.length; i < len; i++) {
+                    const record = records[i];
                     cache.set(record.key, record);
                 }
                 this._allDataCache = cache;
