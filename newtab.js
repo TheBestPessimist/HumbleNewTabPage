@@ -1164,12 +1164,13 @@ function verifyColumns() {
     const existing = new Set(columns.flat());
     const missing = root.filter(id => !existing.has(id));
 
-    // add missing root items
-    missing.forEach(id => {
+    // add missing root items - use for loop for performance
+    for (let i = 0, len = missing.length; i < len; i++) {
+        const id = missing[i];
         if (getConfig(`show_${id}`)) {
             columns[0].push(id);
         }
-    });
+    }
 
     // populate coordinate map and remove empty columns
     coords = {};
