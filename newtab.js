@@ -22,7 +22,7 @@ const Perf = {
         this.marks.push({label, time: now, elapsed});
         // Use Performance API for DevTools integration
         try {
-            performance.mark(`perf-${label.replaceAll(' ', '-')}`);
+            performance.mark(`perf-${label.replace(/ /g, '-')}`);
         } catch (e) {
         }
         console.log(`[PERF] ${elapsed.toFixed(2)}ms - ${label}`);
