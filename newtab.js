@@ -1705,10 +1705,13 @@ function initSettings() {
             // show custom css on advanced tab
             if (currentIndex === len - 1) {
                 const allcss = document.getElementById('all_css');
-                allcss.value = Object.keys(config)
-                    .map(k => getStyle(k, getConfig(k)))
-                    .filter(css => css && css.length < 1000)
-                    .join('\n');
+                const configKeys = Object.keys(config);
+                const cssLines = [];
+                for (let j = 0, kLen = configKeys.length; j < kLen; j++) {
+                    const css = getStyle(configKeys[j], getConfig(configKeys[j]));
+                    if (css && css.length < 1000) cssLines.push(css);
+                }
+                allcss.value = cssLines.join('\n');
             }
 
             // import/export
