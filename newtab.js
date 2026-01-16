@@ -1550,8 +1550,8 @@ function setConfig(key, value) {
                 showConfig(k);
             }
         }
-    } else if (key.startsWith('show')) {
-        const id = key.substring(5);
+    } else if (key.charCodeAt(0) === 115 && key.charCodeAt(1) === 104) { // 's' and 'h' for 'show'
+        const id = key.slice(5);
         if (!value && coords[id]) {
             removeRow(coords[id].x, coords[id].y);
         }
