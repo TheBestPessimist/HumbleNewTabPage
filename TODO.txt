@@ -1,0 +1,24 @@
+- [ ] performance: We are doing an ongoing process where we take a 'papercuts' style approach where we find small to medium things that can improve the performance of the extension throughout the whole codebase, then fix each of them one by one. Find a papercut, fix it, then commit.
+
+The following are non-negotiable constraints that must be taken into account when doing the changes:
+- the extension must be FAST in doing its job (otherwise this extension will be useless)
+- the extension must support ALL 10_000 of my bookmarks
+- the extension must show all open bookmarks folders, no matter if a single folder has 5000 bookmarks
+- tests must be successful after every change: `npm test`
+- we are targeting modern browsers with modern features, therefore use modern JS, HTML and CSS patterns
+
+More hints:
+- as this is  an ongoing process, continue with the next batch of papercut fixes. Check the git commit and resume where you left off. (ie: if last commit's papercut was #51, then you continue with #52)
+- FOR EVERY INDIVIDUAL PAPERCUT FIXED, i want you to MAKE A COMMIT explaining what was changed and how it improved the code or the performance. Keep the number of words in the commit message under 100 characters
+- DO NOT STOP until you've fixed at least 50
+- do not pollute the code with needless or obvious comments. Cleanup redundant comments if they exists as well
+- think VERY HARD before making a change: does it improve something, or is it just change for the sake of change?
+- always prefer `template literal` instead of string concat. We're not in the fucking jungle here
+- NEVER refactor to use `charCodeAt` as it doesn't improve perf, instead it increases the code complexity TREMENDOUSLY
+- do NOT use subagents
+- focus on performance:
+    - Reducing DOM operations
+    - Caching expensive lookups
+    - Avoiding unnecessary reflows
+    - Optimizing hot loops
+    - Reducing memory allocations in critical paths

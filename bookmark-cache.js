@@ -84,7 +84,9 @@ const BookmarkCache = {
             request.onerror = () => reject(request.error);
             request.onsuccess = () => {
                 const cache = new Map();
-                for (const record of request.result) {
+                const records = request.result;
+                for (let i = 0, len = records.length; i < len; i++) {
+                    const record = records[i];
                     cache.set(record.key, record);
                 }
                 this._allDataCache = cache;
@@ -115,7 +117,8 @@ const BookmarkCache = {
 
         const start = performance.now();
         const results = new Map();
-        for (const key of keys) {
+        for (let i = 0, len = keys.length; i < len; i++) {
+            const key = keys[i];
             const value = this._allDataCache.get(key);
             if (value) results.set(key, value);
         }
@@ -142,13 +145,18 @@ const BookmarkCache = {
      * @returns {Promise<Map<string, object>>}
      */
     async getFolders(folderIds) {
-        const keys = folderIds.map(id => `folder:${id}`);
+        const len = folderIds.length;
+        const keys = new Array(len);
+        for (let i = 0; i < len; i++) {
+            keys[i] = `folder:${folderIds[i]}`;
+        }
         const records = await this.getMany(keys);
         const result = new Map();
-        records.forEach((value, key) => {
-            const id = key.replace('folder:', '');
-            result.set(id, value);
-        });
+        // Reuse keys array to avoid duplicate string construction
+        for (let i = 0; i < len; i++) {
+            const value = records.get(keys[i]);
+            if (value) result.set(folderIds[i], value);
+        }
         return result;
     },
 
@@ -159,17 +167,16 @@ const BookmarkCache = {
      * @returns {Promise<void>}
      */
     async put(key, value) {
-        const record = {...value, key};
+        value.key = key;
         const db = await this.openDB();
         return new Promise((resolve, reject) => {
             const tx = db.transaction(this.STORE_NAME, 'readwrite');
             const store = tx.objectStore(this.STORE_NAME);
-            const request = store.put(record);
+            const request = store.put(value);
             request.onerror = () => reject(request.error);
             request.onsuccess = () => {
-                // Update cache in-place if it exists
                 if (this._allDataCache) {
-                    this._allDataCache.set(key, record);
+                    this._allDataCache.set(key, value);
                 }
                 resolve();
             };
@@ -191,16 +198,19 @@ const BookmarkCache = {
             tx.oncomplete = () => {
                 // Update cache in-place if it exists
                 if (this._allDataCache) {
-                    records.forEach(({key, value}) => {
+                    for (let i = 0; i < records.length; i++){
+                        const {key, value} = records[i];
                         this._allDataCache.set(key, {...value, key});
-                    });
+                    }
                 }
                 resolve();
             };
 
-            records.forEach(({key, value}) => {
+            // Use for loop for better performance
+            for (let i = 0, len = records.length; i < len; i++) {
+                const {key, value} = records[i];
                 store.put({...value, key});
-            });
+            }
         });
     },
 
@@ -219,19 +229,21 @@ const BookmarkCache = {
             tx.oncomplete = () => {
                 // Rebuild cache from the records we just wrote
                 this._allDataCache = new Map();
-                records.forEach(({key, value}) => {
+                for (let i = 0, len = records.length; i < len; i++) {
+                    const {key, value} = records[i];
                     this._allDataCache.set(key, {...value, key});
-                });
+                }
                 resolve();
             };
 
             // Clear all existing data first
             store.clear();
 
-            // Then add all new records
-            records.forEach(({key, value}) => {
+            // Then add all new records - use for loop for performance
+            for (let i = 0, len = records.length; i < len; i++) {
+                const {key, value} = records[i];
                 store.put({...value, key});
-            });
+            }
         });
     },
 
@@ -299,16 +311,22 @@ const BookmarkCache = {
         function processNode(node, parentId = null) {
             // Only process folders (nodes without url)
             if (!node.url) {
-                const children = (node.children || []).map(child => ({
-                    id: child.id,
-                    title: child.title,
-                    url: child.url,
-                    // Mark as folder if no url
-                    ...(child.url ? {} : {isFolder: true})
-                }));
+                const nodeChildren = node.children || [];
+                const childLen = nodeChildren.length;
+                const children = new Array(childLen);
+                for (let j = 0; j < childLen; j++) {
+                    const child = nodeChildren[j];
+                    children[j] = {
+                        id: child.id,
+                        title: child.title,
+                        url: child.url,
+                        // Mark as folder if no url
+                        ...(child.url ? {} : {isFolder: true})
+                    };
+                }
 
                 records.push({
-                    key: `folder:${node.id}`,
+                    key: 'folder:' + node.id,
                     value: {
                         id: node.id,
                         title: node.title,
@@ -318,16 +336,20 @@ const BookmarkCache = {
                 });
 
                 // Recursively process child folders
-                (node.children || []).forEach(child => {
+                for (let i = 0; i < childLen; i++) {
+                    const child = nodeChildren[i];
                     if (!child.url) {
                         processNode(child, node.id);
                     }
-                });
+                }
             }
         }
 
         // Process root nodes
-        tree.forEach(node => processNode(node));
+        for (let i = 0; i < tree.length; i++) {
+            const node = tree[i];
+            processNode(node);
+        }
 
         return records;
     },
@@ -398,11 +420,17 @@ const BookmarkCache = {
                 });
             }
             if (node.children) {
-                node.children.forEach(collectBookmarks);
+                for (let i = 0; i < node.children.length; i++) {
+                    const child = node.children[i];
+                    collectBookmarks(child);
+                }
             }
         }
 
-        tree.forEach(collectBookmarks);
+        for (let i = 0; i < tree.length; i++) {
+            const node = tree[i];
+            collectBookmarks(node);
+        }
 
         // Sort by dateAdded descending and take top N
         bookmarks.sort((a, b) => b.dateAdded - a.dateAdded);
@@ -415,7 +443,7 @@ const BookmarkCache = {
      * @returns {Promise<{data: Array, fresh: boolean}|null>} Cached data or null if expired/missing
      */
     async getSpecialFolder(specialId) {
-        const record = await this.get(`special:${specialId}`);
+        const record = await this.get('special:' + specialId);
         if (!record) return null;
 
         const ttl = this.SPECIAL_TTL[specialId];
@@ -432,7 +460,7 @@ const BookmarkCache = {
      * @returns {Promise<void>}
      */
     async setSpecialFolder(specialId, data) {
-        await this.put(`special:${specialId}`, {
+        await this.put('special:' + specialId, {
             data,
             cachedAt: Date.now()
         });

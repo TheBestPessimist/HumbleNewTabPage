@@ -18,9 +18,10 @@ importScripts('bookmark-cache.js');
 // Sync state
 let syncInProgress = false;
 let lastSyncAttempt = 0;
-const SYNC_DEBOUNCE_MS = 1000; // Debounce rapid bookmark changes
-const HOURLY_SYNC_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
-const SESSIONS_DEBOUNCE_MS = 10 * 1000; // 10 seconds debounce for session changes
+const SYNC_DEBOUNCE_MS = 1000;
+const BOOKMARK_SYNC_MINUTES = 60;
+const HOURLY_SYNC_INTERVAL_MS = BOOKMARK_SYNC_MINUTES * 60 * 1000;
+const SESSIONS_DEBOUNCE_MS = 10_000;
 let sessionsSyncTimeout = null;
 
 /**
@@ -88,30 +89,17 @@ async function checkAndSync() {
 // All bookmark changes trigger a full resync
 // This is simpler and more reliable than incremental updates
 
-chrome.bookmarks.onCreated.addListener((id, bookmark) => {
-    console.log(`[BookmarkCache] Bookmark created: ${id}`);
-    triggerSync('bookmark-created');
-});
+// Use single handler factory to reduce code duplication
+const createBookmarkHandler = (eventName, reason) => (id) => {
+    console.log(`[BookmarkCache] ${eventName}: ${id}`);
+    triggerSync(reason);
+};
 
-chrome.bookmarks.onRemoved.addListener((id, removeInfo) => {
-    console.log(`[BookmarkCache] Bookmark removed: ${id}`);
-    triggerSync('bookmark-removed');
-});
-
-chrome.bookmarks.onChanged.addListener((id, changeInfo) => {
-    console.log(`[BookmarkCache] Bookmark changed: ${id}`);
-    triggerSync('bookmark-changed');
-});
-
-chrome.bookmarks.onMoved.addListener((id, moveInfo) => {
-    console.log(`[BookmarkCache] Bookmark moved: ${id}`);
-    triggerSync('bookmark-moved');
-});
-
-chrome.bookmarks.onChildrenReordered.addListener((id, reorderInfo) => {
-    console.log(`[BookmarkCache] Children reordered: ${id}`);
-    triggerSync('children-reordered');
-});
+chrome.bookmarks.onCreated.addListener(createBookmarkHandler('Bookmark created', 'bookmark-created'));
+chrome.bookmarks.onRemoved.addListener(createBookmarkHandler('Bookmark removed', 'bookmark-removed'));
+chrome.bookmarks.onChanged.addListener(createBookmarkHandler('Bookmark changed', 'bookmark-changed'));
+chrome.bookmarks.onMoved.addListener(createBookmarkHandler('Bookmark moved', 'bookmark-moved'));
+chrome.bookmarks.onChildrenReordered.addListener(createBookmarkHandler('Children reordered', 'children-reordered'));
 
 // =============================================================================
 // EXTENSION LIFECYCLE EVENTS
@@ -141,18 +129,21 @@ async function syncClosedTabs(reason) {
     try {
         // Get max 20 recently closed (we'll slice to user preference in newtab.js)
         const sessions = await chrome.sessions.getRecentlyClosed({ maxResults: 20 });
-        const closed = sessions.map(session => {
+        const len = sessions.length;
+        const closed = new Array(len);
+        for (let i = 0; i < len; i++) {
+            const session = sessions[i];
             // Normalize window with single tab to just a tab
             if (session.window?.tabs.length === 1) {
                 session.tab = session.window.tabs[0];
             }
-            return {
-                sessionId: session.window ? session.window.sessionId : session.tab.sessionId,
-                title: session.tab ? session.tab.title : `${session.window.tabs.length} Tabs`,
+            closed[i] = {
+                sessionId: session.window?.sessionId ?? session.tab.sessionId,
+                title: session.tab?.title ?? `${session.window.tabs.length} Tabs`,
                 url: session.tab?.url ?? null,
                 isWindow: !!session.window
             };
-        });
+        }
         await BookmarkCache.setSpecialFolder('closed', closed);
         console.log(`[Sessions] Cached ${closed.length} closed tabs (reason: ${reason})`);
     } catch (error) {
@@ -167,17 +158,26 @@ async function syncClosedTabs(reason) {
 async function syncDevices(reason) {
     try {
         const devices = await chrome.sessions.getDevices({ maxResults: 10 });
-        const deviceData = devices.map(device => {
-            const children = device.sessions.flatMap(session => {
+        const devLen = devices.length;
+        const deviceData = new Array(devLen);
+        for (let i = 0; i < devLen; i++) {
+            const device = devices[i];
+            const sessions = device.sessions;
+            const children = [];
+            for (let j = 0, sLen = sessions.length; j < sLen; j++) {
+                const session = sessions[j];
                 const tabs = session.window ? session.window.tabs : [session.tab];
-                return tabs.map(tab => ({ title: tab.title, url: tab.url }));
-            });
-            return {
+                for (let k = 0, tLen = tabs.length; k < tLen; k++) {
+                    const tab = tabs[k];
+                    children.push({ title: tab.title, url: tab.url });
+                }
+            }
+            deviceData[i] = {
                 id: `device.${device.deviceName}`,
                 title: device.deviceName,
                 children
             };
-        });
+        }
         await BookmarkCache.setSpecialFolder('devices', deviceData);
         console.log(`[Sessions] Cached ${deviceData.length} devices (reason: ${reason})`);
     } catch (error) {
@@ -216,7 +216,7 @@ const SESSIONS_ALARM_NAME = 'sessions-cache-sync';
 
 // Create alarms
 chrome.alarms.create(BOOKMARK_ALARM_NAME, {
-    periodInMinutes: 60 // Hourly for bookmarks
+    periodInMinutes: BOOKMARK_SYNC_MINUTES
 });
 
 chrome.alarms.create(SESSIONS_ALARM_NAME, {

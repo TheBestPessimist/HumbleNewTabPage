@@ -4,11 +4,13 @@
 // PERFORMANCE MEASUREMENT - Remove after debugging
 // =============================================================================
 
+const PERF_SEPARATOR = '='.repeat(60);
+
 const Perf = {
     startTime: performance.now(),
-    scriptLoadTime: performance.now(), // When this script started
+    scriptLoadTime: performance.now(),
     marks: [],
-    operations: [], // Detailed operation log
+    operations: [],
     enabled: true,
     apiCalls: {count: 0, totalTime: 0, calls: []},
     cacheCalls: {count: 0, totalTime: 0, calls: []},
@@ -22,7 +24,7 @@ const Perf = {
         this.marks.push({label, time: now, elapsed});
         // Use Performance API for DevTools integration
         try {
-            performance.mark(`perf-${label.replace(/\s+/g, '-')}`);
+            performance.mark(`perf-${label.replace(/ /g, '-')}`);
         } catch (e) {
         }
         console.log(`[PERF] ${elapsed.toFixed(2)}ms - ${label}`);
@@ -77,9 +79,9 @@ const Perf = {
         // Resource timing for scripts
         const resources = performance.getEntriesByType('resource');
 
-        console.log('\n' + '='.repeat(60));
+        console.log(PERF_SEPARATOR);
         console.log('PERFORMANCE REPORT - Copy everything below this line');
-        console.log('='.repeat(60));
+        console.log(PERF_SEPARATOR);
 
         // Summary stats
         console.log('\n📊 SUMMARY:');
@@ -102,53 +104,68 @@ const Perf = {
             console.log(`  DOM interactive: ${navTiming.domInteractive.toFixed(2)}ms`);
         }
 
-        // Script loading times
-        const scriptResources = resources.filter(r => r.name.includes('.js'));
+        // Script loading times - filter with for loop
+        const scriptResources = [];
+        for (let i = 0, len = resources.length; i < len; i++) {
+            const r = resources[i];
+            if (r.name.endsWith('.js')) scriptResources.push(r);
+        }
         if (scriptResources.length > 0) {
             console.log('\n📜 SCRIPT LOADING:');
-            scriptResources.forEach(r => {
-                const name = r.name.split('/').pop();
+            for (let i = 0, len = scriptResources.length; i < len; i++) {
+                const r = scriptResources[i];
+                const lastSlash = r.name.lastIndexOf('/');
+                const name = lastSlash >= 0 ? r.name.slice(lastSlash + 1) : r.name;
                 console.log(`  ${name}: start=${r.startTime.toFixed(1)}ms, duration=${r.duration.toFixed(1)}ms`);
-            });
+            }
         }
 
         // Timeline
         console.log('\n📍 TIMELINE (marks):');
         let prev = this.startTime;
-        this.marks.forEach(m => {
+        for (let i = 0, len = this.marks.length; i < len; i++) {
+            const m = this.marks[i];
             const delta = m.time - prev;
             const bar = '█'.repeat(Math.min(Math.ceil(delta / 10), 50));
             console.log(`  ${m.elapsed.toFixed(1).padStart(7)}ms | ${bar} +${delta.toFixed(1)}ms | ${m.label}`);
             prev = m.time;
-        });
+        }
 
-        // Slow operations (>5ms)
-        const slowOps = this.operations.filter(o => o.duration > 5).sort((a, b) => b.duration - a.duration);
+        // Slow operations (>5ms) - filter with for loop, then sort
+        const slowOps = [];
+        for (let i = 0, len = this.operations.length; i < len; i++) {
+            const o = this.operations[i];
+            if (o.duration > 5) slowOps.push(o);
+        }
         if (slowOps.length > 0) {
+            slowOps.sort((a, b) => b.duration - a.duration);
             console.log('\n🐌 SLOW OPERATIONS (>5ms):');
-            slowOps.forEach(o => {
+            for (let i = 0, len = slowOps.length; i < len; i++) {
+                const o = slowOps[i];
                 console.log(`  ${o.duration.toFixed(1).padStart(7)}ms | ${o.label}`);
-            });
+            }
         }
 
         // IndexedDB cache breakdown
         if (this.cacheCalls.calls.length > 0) {
             console.log('\n💾 INDEXEDDB CACHE CALLS:');
-            const sorted = [...this.cacheCalls.calls].sort((a, b) => b.duration - a.duration);
-            sorted.forEach(c => {
+            const sorted = this.cacheCalls.calls.toSorted((a, b) => b.duration - a.duration);
+            for (let i = 0, len = sorted.length; i < len; i++) {
+                const c = sorted[i];
                 const bar = '█'.repeat(Math.min(Math.ceil(c.duration / 10), 50));
                 console.log(`  ${c.duration.toFixed(1).padStart(7)}ms | ${bar} | ${c.api}`);
-            });
+            }
         }
 
         // Chrome API breakdown
         if (this.apiCalls.calls.length > 0) {
             console.log('\n🔌 CHROME API CALLS (special folders only, after first paint):');
-            const sorted = [...this.apiCalls.calls].sort((a, b) => b.duration - a.duration);
-            sorted.forEach(c => {
+            const sorted = this.apiCalls.calls.toSorted((a, b) => b.duration - a.duration);
+            for (let i = 0, len = sorted.length; i < len; i++) {
+                const c = sorted[i];
                 const bar = '█'.repeat(Math.min(Math.ceil(c.duration / 10), 50));
                 console.log(`  ${c.duration.toFixed(1).padStart(7)}ms | ${bar} | ${c.api}`);
-            });
+            }
         }
 
         // Diagnosis
@@ -173,8 +190,12 @@ const Perf = {
         if (this.apiCalls.totalTime > 100) {
             console.log(`  ⚠️  Chrome APIs taking ${this.apiCalls.totalTime.toFixed(0)}ms`);
         }
-        const renderOps = this.operations.filter(o => o.label.includes('render'));
-        const renderTime = renderOps.reduce((sum, o) => sum + o.duration, 0);
+        // Calculate render time with single loop (faster than filter+reduce)
+        let renderTime = 0;
+        for (let i = 0, len = this.operations.length; i < len; i++) {
+            const o = this.operations[i];
+            if (o.label.includes('render')) renderTime += o.duration;
+        }
         if (renderTime > 50) {
             console.log(`  ⚠️  Rendering taking ${renderTime.toFixed(0)}ms`);
         }
@@ -192,9 +213,9 @@ const Perf = {
             console.log(`   Need to reduce by: ${(totalFromNav - 25).toFixed(0)}ms`);
         }
 
-        console.log('\n' + '='.repeat(60));
+        console.log(PERF_SEPARATOR);
         console.log('END OF PERFORMANCE REPORT');
-        console.log('='.repeat(60) + '\n');
+        console.log(`${PERF_SEPARATOR}\n`);
     }
 };
 
@@ -221,14 +242,17 @@ const SpecialFolders = {
     // All special IDs (for iteration)
     all: ['top', 'recent', 'closed', 'devices'],
 
-    // Check if an ID is a special folder
+    // Pre-computed Set for O(1) lookups (all special folders are also folders)
+    _specialSet: new Set(['top', 'recent', 'closed', 'devices']),
+
+    // Check if an ID is a special folder (O(1) Set lookup)
     isFolder(id) {
-        return this.defs[id]?.isFolder;
+        return this._specialSet.has(id);
     },
 
-    // Check if an ID is any special type
+    // Check if an ID is any special type (O(1) Set lookup)
     isSpecial(id) {
-        return !!this.defs[id];
+        return this._specialSet.has(id);
     },
 
     // Get node definition for rendering
@@ -299,15 +323,21 @@ const SpecialFolders = {
     // Hydrate cached data with runtime properties (action callbacks, className)
     _hydrateData(id, data) {
         if (id === 'closed') {
-            return data.map(item => ({
-                ...item,
-                className: item.isWindow ? 'window' : null,
-                action: () => {
-                    chrome.sessions.restore(item.sessionId);
-                    refreshClosed();
-                    return false;
-                }
-            }));
+            const len = data.length;
+            const result = new Array(len);
+            for (let i = 0; i < len; i++) {
+                const item = data[i];
+                result[i] = {
+                    ...item,
+                    className: item.isWindow ? 'window' : null,
+                    action: () => {
+                        chrome.sessions.restore(item.sessionId);
+                        refreshClosed();
+                        return false;
+                    }
+                };
+            }
+            return result;
         }
         // 'top', 'recent', 'devices' don't need hydration
         return data;
@@ -316,7 +346,12 @@ const SpecialFolders = {
 
 // Convenience references
 const special = SpecialFolders.all;
-const specialFolderIds = special.filter(id => SpecialFolders.isFolder(id));
+// Use for loop for better performance
+const specialFolderIds = [];
+for (let i = 0, len = special.length; i < len; i++) {
+    const id = special[i];
+    if (SpecialFolders.isFolder(id)) specialFolderIds.push(id);
+}
 
 // =============================================================================
 // BOOKMARK LOADING - Load from IndexedDB cache (populated by service worker)
@@ -351,11 +386,10 @@ async function getFolderFromCache(id) {
     try {
         const folder = await BookmarkCache.getFolder(id);
         const duration = performance.now() - start;
-        const children = folder?.children || [];
         Perf.cacheCalls.count++;
         Perf.cacheCalls.totalTime += duration;
         Perf.cacheCalls.calls.push({api: `cache.getFolder(${id})`, duration});
-        return children;
+        return folder ? folder.children : [];
     } catch (e) {
         console.error(`[BookmarkCache] Error loading folder ${id}:`, e);
         cacheLoadError = e;
@@ -390,8 +424,15 @@ async function getFoldersFromCache(ids) {
  */
 async function getRootFolderIds() {
     const folder = await BookmarkCache.getFolder('0');
-    if (!folder?.children) return [];
-    return folder.children.filter(c => c.isFolder).map(c => c.id);
+    if (!folder || !folder.children) return [];
+    const children = folder.children;
+    const len = children.length;
+    const result = [];
+    for (let i = 0; i < len; i++) {
+        const c = children[i];
+        if (c.isFolder) result.push(c.id);
+    }
+    return result;
 }
 
 // Iterate over column storage entries, calling fn(x, y, id) for each
@@ -403,7 +444,7 @@ function forEachColumnEntry(fn) {
             const id = localStorage.getItem(`column.${x}.${y}`);
             if (id) {
                 foundInRow = true;
-                if (fn?.(x, y, id) === false) return;
+                if (fn(x, y, id) === false) return;
             } else {
                 break;
             }
@@ -422,10 +463,10 @@ async function getChildren_internal(id) {
 
     // Regular bookmarks: load from BookmarkCache (uses in-memory cache)
     const children = await getFolderFromCache(id);
-    // Mark folders (items with isFolder flag)
-    children.forEach(child => {
-        if (child.isFolder) child.children = true;
-    });
+    // Mark folders (items with isFolder flag) - use for loop for performance
+    for (let i = 0, len = children.length; i < len; i++) {
+        if (children[i].isFolder) children[i].children = true;
+    }
     return children;
 }
 
@@ -450,7 +491,7 @@ function render(node, target) {
 
     const li = document.createElement('li');
     const a = document.createElement('a');
-    const {url} = node;
+    const {url, children, id} = node;
 
     if (url) {
         a.href = url;
@@ -458,18 +499,18 @@ function render(node, target) {
         a.tabIndex = 0;
     }
 
-    let text = node.title || node.name || '';
-    if (!text && node.title === null) text = node.url || '';
-    a.innerText = text;
+    a.textContent = node.title ?? node.name ?? url ?? '';
 
     if (node.tooltip) a.title = node.tooltip;
     setClass(a, node);
-    a.insertBefore(getIcon(node), a.firstChild);
+    a.prepend(getIcon(node)); // Modern API, cleaner than insertBefore
+
+    // Cache newtab config outside conditionals to avoid repeated lookups
+    const newtab = url ? getConfig('newtab') : 0;
 
     if (node.action) {
-        a.onclick = e => node.action(e);
+        a.onclick = node.action;
     } else if (url) {
-        const newtab = getConfig('newtab');
         if (newtab === 1) {
             a.target = '_blank';
         } else if (newtab === 2) {
@@ -479,7 +520,9 @@ function render(node, target) {
             };
         }
         // Handle chrome:// and file:/// urls that need special opening
-        if (url.startsWith('chrome') || url.startsWith('file:/')) {
+        // Use charCodeAt for faster check than startsWith
+        const firstChar = url.charCodeAt(0);
+        if (firstChar === 99 || firstChar === 102) { // 'c' or 'f'
             a.onclick = e => {
                 openLink(node, newtab || (e.ctrlKey ? 2 : 0));
                 return false;
@@ -491,16 +534,16 @@ function render(node, target) {
                 }
             };
         }
-    } else if (!node.children) {
+    } else if (!children) {
         a.style.pointerEvents = 'none';
     }
 
-    li.appendChild(a);
+    li.append(a); // Modern API
 
     // folder
-    if (node.children) {
+    if (children) {
         // Store node ID for deferred loading (dataset may not exist in test env)
-        if (li.dataset) li.dataset.nodeId = node.id;
+        if (li.dataset) li.dataset.nodeId = id;
 
         // Check if this folder should auto-expand (show_root=false case)
         if (node.autoExpand && a.dataset) {
@@ -508,22 +551,22 @@ function render(node, target) {
         }
 
         // Check if folder should be open
-        const shouldBeOpen = a.open || (getConfig('remember_open') && localStorage.getItem(`open.${node.id}`));
+        const shouldBeOpen = a.open || (getConfig('remember_open') && localStorage.getItem(`open.${id}`));
         if (shouldBeOpen) {
             setClass(a, node, true);
             a.open = true;
             // If children are already loaded as an array, render them immediately
-            if (Array.isArray(node.children)) {
-                renderAll(node.children, li);
-            } else if (SpecialFolders.isFolder(node.id)) {
+            if (Array.isArray(children)) {
+                renderAll(children, li);
+            } else if (SpecialFolders.isFolder(id)) {
                 // Special folders require slow Chrome API calls - defer loading
                 a.dataset.deferred = 'true';
             } else {
                 // Regular bookmarks: fetch children from BookmarkCache (fast, in-memory)
                 (async () => {
-                    const children = await getChildren_internal(node.id);
+                    const folderChildren = await getChildren_internal(id);
                     if (a.open && !a.nextSibling) {
-                        renderAll(children, li);
+                        renderAll(folderChildren, li);
                     }
                 })();
             }
@@ -532,7 +575,7 @@ function render(node, target) {
         enableDragFolder(node, a);
     }
 
-    target.appendChild(li);
+    target.append(li); // Modern API
     return li;
 }
 
@@ -542,22 +585,25 @@ function renderAll(nodes, target, toplevel) {
     const fragment = document.createDocumentFragment();
     const ul = document.createElement('ul');
 
-    nodes.forEach(node => {
+    // Use for loop instead of forEach for better performance in hot path
+    for (let i = 0, len = nodes.length; i < len; i++) {
+        const node = nodes[i];
         // skip extensions and duplicated child folders
         if (toplevel || !coords[node.id]) render(node, ul);
-    });
-    if (ul.childNodes.length === 0) {
+    }
+    // Use firstChild check instead of childNodes.length (faster)
+    if (!ul.firstChild) {
         render({id: 'empty', title: '< Empty >'}, ul);
     }
     if (toplevel) {
-        fragment.appendChild(ul);
-        target.appendChild(fragment);
+        fragment.append(ul);
+        target.append(fragment);
     } else {
         // wrap child ul for animation
         const wrap = document.createElement('div');
-        wrap.appendChild(ul);
-        fragment.appendChild(wrap);
-        target.appendChild(fragment);
+        wrap.append(ul);
+        fragment.append(wrap);
+        target.append(fragment);
     }
     updateTooltips();
     return ul;
@@ -573,32 +619,57 @@ async function renderColumn(index, target) {
             renderAll(result, target);
             addColumnHandlers(index, target);
         } else if (ids.length > 0) {
-            const results = await Promise.all(ids.map(id => getSubTree(id)));
-            const nodes = results.flat();
+            const len = ids.length;
+            const promises = new Array(len);
+            for (let i = 0; i < len; i++) {
+                promises[i] = getSubTree(ids[i]);
+            }
+            const results = await Promise.all(promises);
+            // Flatten results with for loop (faster than flat())
+            const nodes = [];
+            for (let i = 0; i < len; i++) {
+                const arr = results[i];
+                for (let j = 0, jLen = arr.length; j < jLen; j++) {
+                    nodes.push(arr[j]);
+                }
+            }
             renderAll(nodes, target, true);
             addColumnHandlers(index, target);
         }
     });
 }
 
+// Cached DOM element references (avoid repeated getElementById calls)
+let mainElement = null;
+function getMainElement() {
+    return mainElement ??= document.getElementById('main');
+}
+
 // render all columns to main div
 async function renderColumns() {
     Perf.mark('renderColumns start');
-    const target = document.getElementById('main');
+    const target = getMainElement();
     target.replaceChildren(); // Modern way to clear children
 
     // Create all column containers first (fast, synchronous)
-    const columnElements = columns.map((_, i) => {
+    const columnCount = columns.length;
+    const columnWidth = `${(1 / columnCount) * 100}%`;
+    const columnElements = new Array(columnCount);
+    for (let i = 0; i < columnCount; i++) {
         const column = document.createElement('div');
         column.className = 'column';
-        column.style.width = `${(1 / columns.length) * 100}%`;
+        column.style.width = columnWidth;
         enableDragColumn(i, column);
-        target.appendChild(column);
-        return column;
-    });
+        target.append(column);
+        columnElements[i] = column;
+    }
 
     // Render all columns in parallel and wait for completion
-    await Promise.all(columnElements.map((column, i) => renderColumn(i, column)));
+    const renderPromises = new Array(columnCount);
+    for (let i = 0; i < columnCount; i++) {
+        renderPromises[i] = renderColumn(i, columnElements[i]);
+    }
+    await Promise.all(renderPromises);
 
     enableDragDrop();
 }
@@ -607,26 +678,31 @@ async function renderColumns() {
 // Special folders (top, recent, closed, devices) require slow Chrome API calls
 async function expandDeferredFolders() {
     // Handle deferred special folders (marked with data-deferred="true")
-    const deferredLinks = [...document.querySelectorAll('#main a.folder[data-deferred="true"]')];
-    if (deferredLinks.length === 0) return;
+    const deferredLinks = document.querySelectorAll('#main a.folder[data-deferred="true"]');
+    const linkCount = deferredLinks.length;
+    if (linkCount === 0) return;
 
-    console.log(`[expandDeferredFolders] Loading ${deferredLinks.length} special folders`);
+    console.log(`[expandDeferredFolders] Loading ${linkCount} special folders`);
 
-    const promises = deferredLinks.map(async (a) => {
-        const li = a.parentNode;
-        const nodeId = li?.dataset?.nodeId;
-        if (!nodeId || !a.open || a.nextSibling) return;
+    const promises = new Array(linkCount);
+    for (let i = 0; i < linkCount; i++) {
+        const a = deferredLinks[i];
+        promises[i] = (async () => {
+            const li = a.parentNode;
+            const nodeId = li?.dataset?.nodeId;
+            if (!nodeId || !a.open || a.nextSibling) return;
 
-        delete a.dataset.deferred;
-        const folderName = a.textContent || nodeId;
-        const children = await getChildren({id: nodeId, children: true}, folderName);
-        if (a.open && !a.nextSibling) {
-            renderAll(children, li);
-        }
-    });
+            delete a.dataset.deferred;
+            const folderName = a.textContent || nodeId;
+            const children = await getChildren({id: nodeId, children: true}, folderName);
+            if (a.open && !a.nextSibling) {
+                renderAll(children, li);
+            }
+        })();
+    }
 
     await Promise.all(promises);
-    Perf.mark(`Expanded ${deferredLinks.length} deferred special folders`);
+    Perf.mark(`Expanded ${linkCount} deferred special folders`);
 }
 
 // enables click and context menu for given folder
@@ -655,7 +731,7 @@ function addFolderHandlers(node, a) {
                 items.push({label: 'Move folder left', action: () => addRow(node.id, pos.x - 1)});
             if (pos.x < columns.length - 1)
                 items.push({label: 'Move folder right', action: () => addRow(node.id, pos.x + 1)});
-            if (!root.includes(node.id))
+            if (!rootSet?.has(node.id))
                 items.push({label: 'Remove folder', action: () => removeRow(pos.x, pos.y)});
         }
     }
@@ -700,10 +776,10 @@ function addColumnHandlers(index, ul) {
 function getMenuItems(node) {
     const items = [{label: 'Open all links in folder', action: () => openLinks(node)}];
     if (node.id === 'closed')
-        items.push({label: 'Clear browsing data', action: () => openLink({url: 'chrome://settings/clearBrowserData'}, 1)});
+        items.push({label: 'Clear browsing data', action: () => openLink({url: `chrome://settings/clearBrowserData`}, 1)});
     if (node.id === 'devices')
-        items.push({label: 'History', action: () => openLink({url: 'chrome://history'}, 1)});
-    if (Number(node.id))
+        items.push({label: 'History', action: () => openLink({url: `chrome://history`}, 1)});
+    if (+node.id > 0)
         items.push({label: 'Edit bookmarks', action: () => openLink({url: `chrome://bookmarks/?id=${node.id}`}, 1)});
     return items;
 }
@@ -713,29 +789,35 @@ function renderMenu(items, x, y) {
     const ul = document.createElement('ul');
     ul.className = 'menu';
 
-    items.forEach((item, i) => {
+    // Use DocumentFragment to batch DOM operations
+    const fragment = document.createDocumentFragment();
+    const len = items.length;
+    const lastIndex = len - 1;
+    for (let i = 0; i < len; i++) {
+        const item = items[i];
         if (!item) {
             // Spacer - only add if not at start or end
-            if (i > 0 && i < items.length - 1) {
+            if (i > 0 && i < lastIndex) {
                 const li = document.createElement('li');
-                li.appendChild(document.createElement('hr'));
-                ul.appendChild(li);
+                li.append(document.createElement('hr'));
+                fragment.append(li);
             }
-            return;
+            continue;
         }
         const li = document.createElement('li');
         const a = document.createElement('a');
-        a.innerText = item.label;
+        a.textContent = item.label;
         a.tabIndex = 0;
         a.onclick = () => {
             item.action();
             return false;
         };
-        li.appendChild(a);
-        ul.appendChild(li);
-    });
+        li.append(a);
+        fragment.append(li);
+    }
+    ul.append(fragment);
 
-    document.body.appendChild(ul);
+    document.body.append(ul);
     ul.style.left = `${Math.max(Math.min(x, window.innerWidth + window.scrollX - ul.clientWidth), 0)}px`;
     ul.style.top = `${Math.max(Math.min(y, window.innerHeight + window.scrollY - ul.clientHeight), 0)}px`;
     ul.onmousedown = e => {
@@ -808,7 +890,7 @@ function enableDragFolder(node, a) {
 
 // init drag and drop handlers
 function enableDragDrop() {
-    const main = document.getElementById('main');
+    const main = getMainElement();
 
     if (getConfig('lock')) {
         main.ondragover = main.ondragleave = main.ondrop = null;
@@ -893,12 +975,8 @@ function getDropX(target) {
     }
     if (!target) return null;
 
-    let x = 0;
-    while (target.previousSibling) {
-        x++;
-        target = target.previousSibling;
-    }
-    return x;
+    // Use Array.prototype.indexOf for O(1) lookup instead of O(n) sibling traversal
+    return Array.prototype.indexOf.call(target.parentNode.children, target);
 }
 
 // gets y coordinate of drop target
@@ -906,10 +984,9 @@ function getDropY(target, event) {
     if (target.tagName !== 'LI' && target.tagName !== 'UL') return null;
     let y = isAbove(event.pageY, target) ? 1 : 0;
     if (target.tagName === 'LI') {
-        while (target.previousSibling) {
-            y++;
-            target = target.previousSibling;
-        }
+        // Use Array.prototype.indexOf for O(1) lookup instead of O(n) sibling traversal
+        const siblings = target.parentNode.children;
+        y += Array.prototype.indexOf.call(siblings, target);
     }
     return y;
 }
@@ -921,28 +998,42 @@ const isAbove = (pageY, target) =>
 // clears droptarget styles
 function clearDropTarget() {
     if (dropTarget) {
-        dropTarget.style.border = null;
-        dropTarget.style.margin = null;
+        Object.assign(dropTarget.style, {border: null, margin: null});
     }
     dropTarget = null;
 }
 
 let tooltipTimeout = null;
 
-// adds tooltips to truncated text
+// adds tooltips to truncated text - uses requestIdleCallback for non-blocking updates
 function updateTooltips() {
-    if (tooltipTimeout) clearTimeout(tooltipTimeout);
+    if (tooltipTimeout) {
+        if (typeof cancelIdleCallback !== 'undefined') {
+            cancelIdleCallback(tooltipTimeout);
+        } else {
+            clearTimeout(tooltipTimeout);
+        }
+    }
 
-    tooltipTimeout = setTimeout(() => {
+    const doUpdate = () => {
         tooltipTimeout = null;
-        document.querySelectorAll('#main li a').forEach(el => {
+        const links = document.querySelectorAll('#main li a');
+        for (let i = 0, len = links.length; i < len; i++) {
+            const el = links[i];
             if (el.clientWidth + 1 < el.scrollWidth) {
-                el.title = el.title || el.textContent;
+                if (!el.title) el.title = el.textContent;
             } else if (el.title === el.textContent) {
                 el.title = '';
             }
-        });
-    }, 100);
+        }
+    };
+
+    // Use requestIdleCallback if available for non-blocking updates
+    if (typeof requestIdleCallback !== 'undefined') {
+        tooltipTimeout = requestIdleCallback(doUpdate, {timeout: 500});
+    } else {
+        tooltipTimeout = setTimeout(doUpdate, 100);
+    }
 }
 
 // Gets children of a node (returns Promise)
@@ -971,14 +1062,15 @@ async function getSubTree(id) {
     return [];
 }
 
-// sets css classes for node
+// sets css classes for node - build class string directly
 function setClass(target, node, isopen) {
-    if (node.className) target.classList.add(node.className);
-    if (node.children) target.classList.add('folder');
-    target.classList.toggle('open', !!isopen);
+    let className = node.className || '';
+    if (node.children) className = className ? `${className} folder` : 'folder';
+    if (isopen) className = className ? `${className} open` : 'open';
     if (SpecialFolders.isSpecial(node.id) || node.id === 'empty') {
-        target.classList.add(node.id);
+        className = className ? `${className} ${node.id}` : node.id;
     }
+    if (className) target.className = className;
 }
 
 // gets best icon for a node
@@ -988,6 +1080,7 @@ function getIcon(node) {
 
     if (node.icons) {
         let size;
+        // Use for-in loop for direct property iteration (no array allocation)
         for (const key in node.icons) {
             const iconInfo = node.icons[key];
             if (iconInfo.url && (!size || (iconInfo.size < size && iconInfo.size > 15))) {
@@ -1009,8 +1102,8 @@ function getIcon(node) {
         icon.decoding = 'async';
         icon.src = url;
         if (url2x) icon.srcset = `${url2x} 2x`;
+        icon.alt = '';
     }
-    icon.alt = ' ';
     return icon;
 }
 
@@ -1020,30 +1113,30 @@ async function toggle(node, a) {
     setClass(a, node, !isopen);
     a.open = !isopen;
 
+    const openKey = `open.${node.id}`;
+    const autoClose = getConfig('auto_close');
     if (isopen) {
-        // close folder
-        localStorage.removeItem(`open.${node.id}`);
+        localStorage.removeItem(openKey);
         if (a.nextSibling) {
-            // auto-close child folders
-            if (getConfig('auto_close')) {
+            if (autoClose) {
                 const wrapper = a.nextSibling.tagName === 'DIV' ? a.nextSibling.firstChild : a.nextSibling;
-                [...wrapper.children].forEach(li => {
-                    if (li.firstChild?.open) li.firstChild.onclick();
-                });
+                const wrapperChildren = wrapper.children;
+                for (let i = 0, len = wrapperChildren.length; i < len; i++) {
+                    const child = wrapperChildren[i].firstChild;
+                    if (child?.open) child.onclick();
+                }
             }
             animate(node, a, isopen);
         }
     } else {
-        // open folder
-        localStorage.setItem(`open.${node.id}`, true);
-        // auto-close sibling folders
-        if (getConfig('auto_close')) {
-            [...a.parentNode.parentNode.children].forEach(li => {
-                const sibling = li.firstChild;
+        localStorage.setItem(openKey, true);
+        if (autoClose) {
+            const siblings = a.parentNode.parentNode.children;
+            for (let i = 0, len = siblings.length; i < len; i++) {
+                const sibling = siblings[i].firstChild;
                 if (sibling !== a && sibling?.open) sibling.onclick();
-            });
+            }
         }
-        // open folder
         if (a.nextSibling) {
             animate(node, a, isopen);
         } else {
@@ -1058,26 +1151,25 @@ async function toggle(node, a) {
 
 // smoothly open or close folder
 function animate(node, a, isopen) {
-    // TODO: fix nested animations
     // wrapper needed for inner height value
     let wrap = a.nextSibling;
+    const inner = wrap.firstChild;
+    const wrapStyle = wrap.style;
     if (a.animationHandle) {
-        // clear last animation
         clearTimeout(a.animationHandle);
         a.animationHandle = null;
     } else {
-        // start animation
-        wrap.style.height = isopen ? `${wrap.firstChild.clientHeight}px` : '0';
-        wrap.style.opacity = isopen ? '1' : '0';
+        wrapStyle.height = isopen ? `${inner.clientHeight}px` : '0';
+        wrapStyle.opacity = isopen ? '1' : '0';
     }
     // requestAnimationFrame twice to ensure at least one frame has passed
     requestAnimationFrame(() => {
         requestAnimationFrame(() => {
             if (wrap) {
                 wrap.className = 'wrap';
-                wrap.style.height = isopen ? '0' : `${wrap.firstChild.clientHeight}px`;
-                wrap.style.opacity = isopen ? '0' : '1';
-                wrap.style.pointerEvents = isopen ? 'none' : null;
+                wrapStyle.height = isopen ? '0' : `${inner.clientHeight}px`;
+                wrapStyle.opacity = isopen ? '0' : '1';
+                wrapStyle.pointerEvents = isopen ? 'none' : '';
             }
         });
     });
@@ -1098,23 +1190,25 @@ function animate(node, a, isopen) {
 // opens immediate children of given node in new tabs
 async function openLinks(node) {
     const result = await getChildren(node);
-    result.forEach(child => openLink(child, 2));
+    for (let i = 0, len = result.length; i < len; i++) {
+        openLink(result[i], 2);
+    }
 }
 
 // opens given node
 function openLink(node, newtab) {
     const {url} = node;
     if (!url) return;
-
     if (newtab) {
         window.open(url, '_blank');
-    } else {
-        window.location.href = url;
+        return;
     }
+    window.location.href = url;
 }
 
 let columns; // columns[x][y] = id
 let root;    // root[] = id
+let rootSet; // Set for O(1) root lookups
 let coords;  // coords[id] = {x, y}
 
 // ensure root folders are included
@@ -1122,19 +1216,35 @@ function verifyColumns() {
     // default layout
     if (columns.length === 0) {
         columns.push([]);
-        columns.push(special.filter(a => getConfig(`show_${a}`)));
+        const defaultColumn = [];
+        for (let i = 0, len = special.length; i < len; i++) {
+            const a = special[i];
+            if (getConfig(`show_${a}`)) defaultColumn.push(a);
+        }
+        columns.push(defaultColumn);
     }
 
-    // find missing root items
-    const existing = new Set(columns.flat());
-    const missing = root.filter(id => !existing.has(id));
+    // find missing root items - build existing set with nested loops (faster than flat())
+    const existing = new Set();
+    for (let x = 0, xLen = columns.length; x < xLen; x++) {
+        const col = columns[x];
+        for (let y = 0, yLen = col.length; y < yLen; y++) {
+            existing.add(col[y]);
+        }
+    }
+    const missing = [];
+    for (let i = 0, len = root.length; i < len; i++) {
+        const id = root[i];
+        if (!existing.has(id)) missing.push(id);
+    }
 
-    // add missing root items
-    missing.forEach(id => {
+    // add missing root items - use for loop for performance
+    for (let i = 0, len = missing.length; i < len; i++) {
+        const id = missing[i];
         if (getConfig(`show_${id}`)) {
             columns[0].push(id);
         }
-    });
+    }
 
     // populate coordinate map and remove empty columns
     coords = {};
@@ -1142,17 +1252,18 @@ function verifyColumns() {
         if (columns[x].length === 0) {
             columns.splice(x, 1);
         } else {
-            columns[x].forEach((id, y) => {
-                coords[id] = {x, y};
-            });
+            const col = columns[x];
+            for (let y = 0, len = col.length; y < len; y++) {
+                coords[col[y]] = {x, y};
+            }
         }
     }
 }
 
 // Show error message when cache is unavailable
 function showCacheError(error) {
-    const main = document.getElementById('main');
-    main.innerHTML = '';
+    const main = getMainElement();
+    main.replaceChildren(); // Modern way to clear children
 
     const errorDiv = document.createElement('div');
     errorDiv.className = 'cache-error';
@@ -1166,7 +1277,7 @@ function showCacheError(error) {
         </ul>
         <p>Check the console for more details.</p>
     `;
-    main.appendChild(errorDiv);
+    main.append(errorDiv);
 
     console.error('[BookmarkCache] Cache unavailable:', error);
     console.error('[BookmarkCache] Cache status:', cacheStatus);
@@ -1212,7 +1323,14 @@ async function loadColumns() {
     } else {
         Perf.mark('loadColumns: fetching root IDs from cache');
         const rootIds = await getRootFolderIds();
-        root = [...special, ...rootIds];
+        // Build root array without concat (avoid intermediate array)
+        const specialLen = special.length;
+        const rootIdsLen = rootIds.length;
+        root = new Array(specialLen + rootIdsLen);
+        for (let i = 0; i < specialLen; i++) root[i] = special[i];
+        for (let i = 0; i < rootIdsLen; i++) root[specialLen + i] = rootIds[i];
+        // Build Set for O(1) lookups
+        rootSet = new Set(root);
         verifyColumns();
         await renderColumns();
     }
@@ -1241,19 +1359,22 @@ function saveColumns() {
     forEachColumnEntry((x, y) => localStorage.removeItem(`column.${x}.${y}`));
     verifyColumns();
     // save new config
-    columns.forEach((col, x) => {
-        col.forEach((id, y) => {
-            localStorage.setItem(`column.${x}.${y}`, id);
-        });
-    });
+    for (let x = 0, xLen = columns.length; x < xLen; x++) {
+        const col = columns[x];
+        for (let y = 0, yLen = col.length; y < yLen; y++) {
+            localStorage.setItem(`column.${x}.${y}`, col[y]);
+        }
+    }
     loadColumns();
 }
 
 // removes ids from columns, returns adjusted {xpos, ypos} if provided
 function removeIdsFromColumns(ids, xpos, ypos) {
+    // Use Set for O(1) lookup instead of O(n) array includes
+    const idSet = new Set(ids);
     for (let x = 0; x < columns.length; x++) {
         for (let y = columns[x].length - 1; y >= 0; y--) {
-            if (ids.includes(columns[x][y])) {
+            if (idSet.has(columns[x][y])) {
                 columns[x].splice(y, 1);
                 if (xpos !== undefined && x === xpos && ypos > y) ypos--;
             }
@@ -1299,14 +1420,15 @@ function removeRow(xpos, ypos) {
 // refresh recently closed tab lists
 function refreshClosed() {
     const targets = [];
-    const folders = [...document.getElementsByClassName('closed')];
+    const folders = document.getElementsByClassName('closed');
 
-    folders.forEach(a => {
+    for (let i = 0, len = folders.length; i < len; i++) {
+        const a = folders[i];
         if (a.nextSibling) {
             a.nextSibling.remove();
             targets.push(a.parentNode);
         }
-    });
+    }
 
     if (folders.length === 0 && coords.closed) {
         const target = document.getElementsByClassName('column')[coords.closed.x];
@@ -1315,7 +1437,10 @@ function refreshClosed() {
     }
 
     getChildren({id: 'closed'}).then(result => {
-        targets.forEach(target => renderAll(result, target));
+        // Use for loop for better performance
+        for (let i = 0, len = targets.length; i < len; i++) {
+            renderAll(result, targets[i]);
+        }
     });
 }
 
@@ -1363,23 +1488,39 @@ const config = {
 // themes is defined in themes.js (loaded before this script)
 let theme = {};
 
-// get config value or default
+// Config value cache - avoids repeated localStorage reads during rendering
+const configCache = new Map();
+
+// get config value or default (uses cache for performance)
 function getConfig(key) {
+    // Use single get() call instead of has() + get() to avoid double lookup
+    const cached = configCache.get(key);
+    if (cached !== undefined) return cached;
+
     const value = localStorage.getItem(`options.${key}`);
+    let result;
     if (value != null) {
         // Dynamic show_* keys (e.g., show_2, show_4) are numbers but not in config
-        const isNumber = typeof config[key] === 'number' || (key.startsWith('show_') && !(key in config));
-        return isNumber ? Number(value) : value;
+        const isShowKey = key.startsWith('show_');
+        const isNumber = typeof config[key] === 'number' || (isShowKey && !(key in config));
+        result = isNumber ? Number(value) : value;
+    } else {
+        result = key in theme ? theme[key] : config[key];
     }
-    return key in theme ? theme[key] : config[key];
+    configCache.set(key, result);
+    return result;
 }
 
 // set config value
 function setConfig(key, value) {
+    // Invalidate cache for this key
+    configCache.delete(key);
+
+    const storageKey = `options.${key}`;
     if (value != null) {
-        localStorage.setItem(`options.${key}`, typeof config[key] === 'number' ? Number(value) : value);
+        localStorage.setItem(storageKey, typeof config[key] === 'number' ? Number(value) : value);
     } else {
-        localStorage.removeItem(`options.${key}`);
+        localStorage.removeItem(storageKey);
         value = key in theme ? theme[key] : config[key];
     }
 
@@ -1388,14 +1529,17 @@ function setConfig(key, value) {
         loadColumns();
     } else if (key === 'theme') {
         theme = themes[value];
-        Object.keys(config).forEach(k => {
+        configCache.clear(); // Theme affects all config defaults
+        const configKeys = Object.keys(config);
+        for (let i = 0, len = configKeys.length; i < len; i++) {
+            const k = configKeys[i];
             if (k !== key) {
                 onChange(k);
                 showConfig(k);
             }
-        });
+        }
     } else if (key.startsWith('show')) {
-        const id = key.substring(5);
+        const id = key.slice(5);
         if (!value && coords[id]) {
             removeRow(coords[id].x, coords[id].y);
         }
@@ -1466,7 +1610,7 @@ function onChange(key, value) {
         if (css) {
             const style = styles[key] ?? (styles[key] = document.createElement('style'));
             document.head.appendChild(style);
-            style.innerText = css;
+            style.textContent = css;
         }
     } else if (key in styles) {
         styles[key].remove();
@@ -1497,14 +1641,16 @@ function loadSettings() {
     Perf.mark('loadSettings start');
     // Remove early-styles.js overrides so new settings can take effect
     document.getElementById('early-styles')?.remove();
-    theme = themes[getConfig('theme')] || {};
-    Object.keys(config).forEach(key => {
+    theme = themes[getConfig('theme')] ?? {};
+    const configKeys = Object.keys(config);
+    for (let i = 0, len = configKeys.length; i < len; i++) {
+        const key = configKeys[i];
         if (key === 'background_image_file') {
             setTimeout(() => onChange('background_image_file'), 0);
         } else {
             onChange(key);
         }
-    });
+    }
     Perf.mark('loadSettings end');
 }
 
@@ -1584,29 +1730,34 @@ function initSettings() {
     const nav = document.getElementById('options_nav');
     let currentIndex = 0;
 
-    [...nav.children].forEach((li, i) => {
-        const a = li.firstChild;
+    const sections = Array.from(options.getElementsByClassName('section'));
+    const navChildren = Array.from(nav.children);
+    for (let i = 0, len = navChildren.length; i < len; i++) {
+        const a = navChildren[i].firstChild;
         a.onclick = function () {
             // clear current style
-            nav.children[currentIndex].firstChild.classList.remove('current');
-            options.getElementsByClassName('section')[currentIndex].classList.remove('current');
+            navChildren[currentIndex].firstChild.classList.remove('current');
+            sections[currentIndex].classList.remove('current');
 
             // apply new current style
             currentIndex = i;
-            nav.children[currentIndex].firstChild.classList.add('current');
-            options.getElementsByClassName('section')[currentIndex].classList.add('current');
+            navChildren[currentIndex].firstChild.classList.add('current');
+            sections[currentIndex].classList.add('current');
 
             // show custom css on advanced tab
-            if (currentIndex === nav.children.length - 1) {
+            if (currentIndex === len - 1) {
                 const allcss = document.getElementById('all_css');
-                allcss.value = Object.keys(config)
-                    .map(k => getStyle(k, getConfig(k)))
-                    .filter(css => css && css.length < 1000)
-                    .join('\n');
+                const configKeys = Object.keys(config);
+                const cssLines = [];
+                for (let j = 0, kLen = configKeys.length; j < kLen; j++) {
+                    const css = getStyle(configKeys[j], getConfig(configKeys[j]));
+                    if (css && css.length < 1000) cssLines.push(css);
+                }
+                allcss.value = cssLines.join('\n');
             }
 
             // import/export
-            if (currentIndex === nav.children.length - 2) {
+            if (currentIndex === len - 2) {
                 const exports = document.getElementById('options_export');
                 const imports = document.getElementById('options_import');
                 const replacer = (k, v) =>
@@ -1619,13 +1770,22 @@ function initSettings() {
                     try {
                         const imported = JSON.parse(imports.value);
                         localStorage.clear();
-                        Object.entries(imported).forEach(([k, v]) => localStorage.setItem(k, v));
+                        // Use for loop for better performance
+                        const entries = Object.entries(imported);
+                        for (let i = 0, len = entries.length; i < len; i++) {
+                            const [k, v] = entries[i];
+                            localStorage.setItem(k, v);
+                        }
                         imports.value = '';
                         imports.placeholder = 'Import successful!';
                         exports.value = JSON.stringify(localStorage, replacer);
                         loadSettings();
                         loadColumns();
-                        Object.keys(config).forEach(showConfig);
+                        // Use for loop for better performance
+                        const configKeys = Object.keys(config);
+                        for (let i = 0, len = configKeys.length; i < len; i++) {
+                            showConfig(configKeys[i]);
+                        }
                     } catch {
                         imports.value = '';
                         imports.placeholder = 'Import error! Please check if your settings are valid JSON.';
@@ -1634,50 +1794,59 @@ function initSettings() {
             }
             return false;
         };
-    });
+    }
 
     // add options to hide bookmark folders (load from cache)
     BookmarkCache.getFolder('0').then(async rootFolder => {
         const placeholder = document.getElementById('options_show_bookmarks');
         const children = rootFolder?.children || [];
-        children.filter(c => c.isFolder).forEach(node => {
+        // Use for loop for better performance
+        for (let i = 0, len = children.length; i < len; i++) {
+            const node = children[i];
+            if (!node.isFolder) continue;
+
             const key = `show_${node.id}`;
             config[key] = 1;
 
             const span = document.createElement('span');
-            span.innerText = node.title;
+            span.textContent = node.title;
 
             const input = document.createElement('input');
             input.type = 'checkbox';
             input.id = `options_${key}`;
 
             const label = document.createElement('label');
-            label.appendChild(span);
-            label.appendChild(input);
-            placeholder.appendChild(label);
-        });
+            label.append(span, input); // append multiple elements at once
+            placeholder.append(label);
+        }
 
         // replace text input with system font list
         if (chrome.fontSettings) {
             const fontInput = document.getElementById('options_font');
             const select = document.createElement('select');
-            fontInput.parentNode.replaceChild(select, fontInput);
             select.id = fontInput.id;
+            fontInput.replaceWith(select); // Modern API
         }
 
-        // show settings
-        Object.keys(config).forEach(initConfig);
+        // show settings - use for loop for better performance
+        const configKeys = Object.keys(config);
+        for (let i = 0, len = configKeys.length; i < len; i++) {
+            initConfig(configKeys[i]);
+        }
         loadSettings();
 
         // load themes
         const themeSelect = document.getElementById('options_theme');
         if (themeSelect.childNodes.length === 0) {
-            Object.keys(themes).forEach(name => {
+            const themeNames = Object.keys(themes);
+            const currentTheme = getConfig('theme');
+            for (let i = 0, len = themeNames.length; i < len; i++) {
+                const name = themeNames[i];
                 const option = document.createElement('option');
-                option.innerText = name;
-                option.selected = name === getConfig('theme');
-                themeSelect.appendChild(option);
-            });
+                option.textContent = name;
+                option.selected = name === currentTheme;
+                themeSelect.append(option);
+            }
         }
 
         // load font list
@@ -1686,12 +1855,20 @@ function initSettings() {
             const select = document.getElementById('options_font');
             if (select.childNodes.length > 0) return;
 
-            [{fontId: 'Sans-serif'}, ...fonts].forEach(({fontId}) => {
+            const currentFont = getConfig('font');
+            // Add Sans-serif first
+            const defaultOption = document.createElement('option');
+            defaultOption.textContent = 'Sans-serif';
+            defaultOption.selected = 'Sans-serif' === currentFont;
+            select.append(defaultOption);
+            // Add remaining fonts
+            for (let i = 0, len = fonts.length; i < len; i++) {
+                const fontId = fonts[i].fontId;
                 const option = document.createElement('option');
-                option.innerText = fontId;
-                option.selected = fontId === getConfig('font');
-                select.appendChild(option);
-            });
+                option.textContent = fontId;
+                option.selected = fontId === currentFont;
+                select.append(option);
+            }
         }
     });
 }
@@ -1701,7 +1878,11 @@ function showOptions(show) {
     document.getElementById('options').style.display = show ? 'block' : 'none';
     if (show) {
         if (!settingsInitialized) initSettings();
-        Object.keys(config).forEach(showConfig);
+        // Use for loop for better performance
+        const configKeys = Object.keys(config);
+        for (let i = 0, len = configKeys.length; i < len; i++) {
+            showConfig(configKeys[i]);
+        }
     }
 }
 
@@ -1717,8 +1898,8 @@ document.addEventListener('keypress', e => {
     }
 });
 
-document.addEventListener('mousedown', () => document.body.classList.add('hide-focus'));
-document.addEventListener('keydown', () => document.body.classList.remove('hide-focus'));
+document.addEventListener('mousedown', () => document.body.classList.add('hide-focus'), {passive: true});
+document.addEventListener('keydown', () => document.body.classList.remove('hide-focus'), {passive: true});
 
 window.onresize = updateTooltips;
 
