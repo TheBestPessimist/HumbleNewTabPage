@@ -4,11 +4,13 @@
 // PERFORMANCE MEASUREMENT - Remove after debugging
 // =============================================================================
 
+const PERF_SEPARATOR = '='.repeat(60);
+
 const Perf = {
     startTime: performance.now(),
-    scriptLoadTime: performance.now(), // When this script started
+    scriptLoadTime: performance.now(),
     marks: [],
-    operations: [], // Detailed operation log
+    operations: [],
     enabled: true,
     apiCalls: {count: 0, totalTime: 0, calls: []},
     cacheCalls: {count: 0, totalTime: 0, calls: []},
@@ -77,10 +79,9 @@ const Perf = {
         // Resource timing for scripts
         const resources = performance.getEntriesByType('resource');
 
-        const separator = '='.repeat(60);
-        console.log(separator);
+        console.log(PERF_SEPARATOR);
         console.log('PERFORMANCE REPORT - Copy everything below this line');
-        console.log(separator);
+        console.log(PERF_SEPARATOR);
 
         // Summary stats
         console.log('\n📊 SUMMARY:');
@@ -212,9 +213,9 @@ const Perf = {
             console.log(`   Need to reduce by: ${(totalFromNav - 25).toFixed(0)}ms`);
         }
 
-        console.log(separator);
+        console.log(PERF_SEPARATOR);
         console.log('END OF PERFORMANCE REPORT');
-        console.log(`${separator}\n`);
+        console.log(`${PERF_SEPARATOR}\n`);
     }
 };
 
