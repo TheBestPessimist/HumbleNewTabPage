@@ -1694,7 +1694,11 @@ function initSettings() {
                         exports.value = JSON.stringify(localStorage, replacer);
                         loadSettings();
                         loadColumns();
-                        Object.keys(config).forEach(showConfig);
+                        // Use for loop for better performance
+                        const configKeys = Object.keys(config);
+                        for (let i = 0, len = configKeys.length; i < len; i++) {
+                            showConfig(configKeys[i]);
+                        }
                     } catch {
                         imports.value = '';
                         imports.placeholder = 'Import error! Please check if your settings are valid JSON.';
