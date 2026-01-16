@@ -652,7 +652,7 @@ async function renderColumns() {
 
     // Create all column containers first (fast, synchronous)
     const columnCount = columns.length;
-    const columnWidth = `${(1 / columnCount) * 100}%`;
+    const columnWidth = (1 / columnCount) * 100 + '%';
     const columnElements = new Array(columnCount);
     for (let i = 0; i < columnCount; i++) {
         const column = document.createElement('div');
