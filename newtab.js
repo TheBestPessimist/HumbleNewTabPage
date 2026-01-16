@@ -1737,12 +1737,15 @@ function initSettings() {
         if (chrome.fontSettings) {
             const fontInput = document.getElementById('options_font');
             const select = document.createElement('select');
-            fontInput.parentNode.replaceChild(select, fontInput);
             select.id = fontInput.id;
+            fontInput.replaceWith(select); // Modern API
         }
 
-        // show settings
-        Object.keys(config).forEach(initConfig);
+        // show settings - use for loop for better performance
+        const configKeys = Object.keys(config);
+        for (let i = 0, len = configKeys.length; i < len; i++) {
+            initConfig(configKeys[i]);
+        }
         loadSettings();
 
         // load themes
