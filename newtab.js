@@ -1075,10 +1075,10 @@ function getIcon(node) {
 
     if (node.icons) {
         let size;
-        // Use Object.values for cleaner iteration (no key needed)
-        const iconValues = Object.values(node.icons);
-        for (let i = 0, len = iconValues.length; i < len; i++) {
-            const iconInfo = iconValues[i];
+        // Iterate over keys to avoid Object.values array allocation
+        const iconKeys = Object.keys(node.icons);
+        for (let i = 0, len = iconKeys.length; i < len; i++) {
+            const iconInfo = node.icons[iconKeys[i]];
             if (iconInfo.url && (!size || (iconInfo.size < size && iconInfo.size > 15))) {
                 url = iconInfo.url;
                 if (iconInfo.size > 31) url2x = iconInfo.url;
