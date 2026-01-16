@@ -136,38 +136,6 @@ async function checkCacheStatus() {
 }
 
 /**
- * Get folder data from cache (replaces chrome.bookmarks.getChildren)
- * @param {string} id - Folder ID
- * @returns {Promise<Array>} - Array of children
- */
-async function getFolderFromCache(id) {
-    try {
-        const folder = await BookmarkCache.getFolder(id);
-        return folder ? folder.children : [];
-    } catch (e) {
-        console.error(`[BookmarkCache] Error loading folder ${id}:`, e);
-        cacheLoadError = e;
-        return [];
-    }
-}
-
-/**
- * Get multiple folders from cache in a single operation
- * @param {string[]} ids - Array of folder IDs
- * @returns {Promise<Map<string, object>>}
- */
-async function getFoldersFromCache(ids) {
-    try {
-        const folders = await BookmarkCache.getFolders(ids);
-        return folders;
-    } catch (e) {
-        console.error(`[BookmarkCache] Error loading folders:`, e);
-        cacheLoadError = e;
-        return new Map();
-    }
-}
-
-/**
  * Get root folder IDs from cache
  * @returns {Promise<string[]>}
  */
@@ -211,7 +179,15 @@ async function getChildren_internal(id) {
     }
 
     // Regular bookmarks: load from BookmarkCache (uses in-memory cache)
-    const children = await getFolderFromCache(id);
+    let children = [];
+    try {
+        const folder = await BookmarkCache.getFolder(id);
+        children = folder ? folder.children : [];
+    } catch (e) {
+        console.error(`[BookmarkCache] Error loading folder ${id}:`, e);
+        cacheLoadError = e;
+    }
+
     // Mark folders (items with isFolder flag) - use for loop for performance
     for (let i = 0, len = children.length; i < len; i++) {
         if (children[i].isFolder) children[i].children = true;
