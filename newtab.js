@@ -509,7 +509,7 @@ function render(node, target) {
     const newtab = url ? getConfig('newtab') : 0;
 
     if (node.action) {
-        a.onclick = e => node.action(e);
+        a.onclick = node.action;
     } else if (url) {
         if (newtab === 1) {
             a.target = '_blank';
