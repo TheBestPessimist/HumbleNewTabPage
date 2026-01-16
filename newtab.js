@@ -1099,7 +1099,7 @@ function getIcon(node) {
         icon.loading = 'lazy';
         icon.decoding = 'async';
         icon.src = url;
-        if (url2x) icon.srcset = `${url2x} 2x`;
+        if (url2x) icon.srcset = url2x + ' 2x';
     }
     icon.alt = ' ';
     return icon;
