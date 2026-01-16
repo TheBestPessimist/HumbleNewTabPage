@@ -67,6 +67,7 @@ body {
 	transition-timing-function: ease-out;
 	will-change: height, opacity;
 	transform: translateZ(0);
+	backface-visibility: hidden;
 }
 .column {
 	display: inline-block;
