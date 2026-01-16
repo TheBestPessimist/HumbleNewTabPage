@@ -548,7 +548,7 @@ function render(node, target) {
         }
 
         // Check if folder should be open
-        const shouldBeOpen = a.open || (getConfig('remember_open') && localStorage.getItem('open.' + id));
+        const shouldBeOpen = a.open || (getConfig('remember_open') && localStorage.getItem(`open.${id}`));
         if (shouldBeOpen) {
             setClass(a, node, true);
             a.open = true;
