@@ -1363,19 +1363,31 @@ const config = {
 // themes is defined in themes.js (loaded before this script)
 let theme = {};
 
-// get config value or default
+// Config value cache - avoids repeated localStorage reads during rendering
+const configCache = new Map();
+
+// get config value or default (uses cache for performance)
 function getConfig(key) {
+    if (configCache.has(key)) return configCache.get(key);
+
     const value = localStorage.getItem(`options.${key}`);
+    let result;
     if (value != null) {
         // Dynamic show_* keys (e.g., show_2, show_4) are numbers but not in config
         const isNumber = typeof config[key] === 'number' || (key.startsWith('show_') && !(key in config));
-        return isNumber ? Number(value) : value;
+        result = isNumber ? Number(value) : value;
+    } else {
+        result = key in theme ? theme[key] : config[key];
     }
-    return key in theme ? theme[key] : config[key];
+    configCache.set(key, result);
+    return result;
 }
 
 // set config value
 function setConfig(key, value) {
+    // Invalidate cache for this key
+    configCache.delete(key);
+
     if (value != null) {
         localStorage.setItem(`options.${key}`, typeof config[key] === 'number' ? Number(value) : value);
     } else {
@@ -1388,6 +1400,7 @@ function setConfig(key, value) {
         loadColumns();
     } else if (key === 'theme') {
         theme = themes[value];
+        configCache.clear(); // Theme affects all config defaults
         Object.keys(config).forEach(k => {
             if (k !== key) {
                 onChange(k);
