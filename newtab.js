@@ -1782,7 +1782,11 @@ function showOptions(show) {
     document.getElementById('options').style.display = show ? 'block' : 'none';
     if (show) {
         if (!settingsInitialized) initSettings();
-        Object.keys(config).forEach(showConfig);
+        // Use for loop for better performance
+        const configKeys = Object.keys(config);
+        for (let i = 0, len = configKeys.length; i < len; i++) {
+            showConfig(configKeys[i]);
+        }
     }
 }
 
