@@ -1112,7 +1112,7 @@ async function toggle(node, a) {
     setClass(a, node, !isopen);
     a.open = !isopen;
 
-    const openKey = 'open.' + node.id;
+    const openKey = `open.${node.id}`;
     if (isopen) {
         // close folder
         localStorage.removeItem(openKey);
