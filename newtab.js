@@ -933,20 +933,35 @@ function clearDropTarget() {
 
 let tooltipTimeout = null;
 
-// adds tooltips to truncated text
+// adds tooltips to truncated text - uses requestIdleCallback for non-blocking updates
 function updateTooltips() {
-    if (tooltipTimeout) clearTimeout(tooltipTimeout);
+    if (tooltipTimeout) {
+        if (typeof cancelIdleCallback !== 'undefined') {
+            cancelIdleCallback(tooltipTimeout);
+        } else {
+            clearTimeout(tooltipTimeout);
+        }
+    }
 
-    tooltipTimeout = setTimeout(() => {
+    const doUpdate = () => {
         tooltipTimeout = null;
-        document.querySelectorAll('#main li a').forEach(el => {
+        const links = document.querySelectorAll('#main li a');
+        for (let i = 0, len = links.length; i < len; i++) {
+            const el = links[i];
             if (el.clientWidth + 1 < el.scrollWidth) {
-                el.title = el.title || el.textContent;
+                if (!el.title) el.title = el.textContent;
             } else if (el.title === el.textContent) {
                 el.title = '';
             }
-        });
-    }, 100);
+        }
+    };
+
+    // Use requestIdleCallback if available for non-blocking updates
+    if (typeof requestIdleCallback !== 'undefined') {
+        tooltipTimeout = requestIdleCallback(doUpdate, {timeout: 500});
+    } else {
+        tooltipTimeout = setTimeout(doUpdate, 100);
+    }
 }
 
 // Gets children of a node (returns Promise)
