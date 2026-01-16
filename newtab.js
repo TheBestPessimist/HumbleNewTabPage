@@ -505,10 +505,12 @@ function render(node, target) {
     setClass(a, node);
     a.prepend(getIcon(node)); // Modern API, cleaner than insertBefore
 
+    // Cache newtab config outside conditionals to avoid repeated lookups
+    const newtab = url ? getConfig('newtab') : 0;
+
     if (node.action) {
         a.onclick = e => node.action(e);
     } else if (url) {
-        const newtab = getConfig('newtab');
         if (newtab === 1) {
             a.target = '_blank';
         } else if (newtab === 2) {
