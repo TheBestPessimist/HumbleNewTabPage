@@ -117,7 +117,8 @@ const BookmarkCache = {
 
         const start = performance.now();
         const results = new Map();
-        for (const key of keys) {
+        for (let i = 0, len = keys.length; i < len; i++) {
+            const key = keys[i];
             const value = this._allDataCache.get(key);
             if (value) results.set(key, value);
         }
@@ -151,8 +152,11 @@ const BookmarkCache = {
         }
         const records = await this.getMany(keys);
         const result = new Map();
-        for (const [key, value] of records) {
-            result.set(key.slice(7), value); // 'folder:'.length === 7
+        // Iterate over folderIds to avoid Map iterator overhead
+        for (let i = 0; i < len; i++) {
+            const folderId = folderIds[i];
+            const value = records.get(`folder:${folderId}`);
+            if (value) result.set(folderId, value);
         }
         return result;
     },
