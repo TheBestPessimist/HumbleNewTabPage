@@ -1,232 +1,6 @@
 'use strict';
 
 // =============================================================================
-// PERFORMANCE MEASUREMENT - Remove after debugging
-// =============================================================================
-
-const PERF_SEPARATOR = '='.repeat(60);
-
-const Perf = {
-    startTime: performance.now(),
-    scriptLoadTime: performance.now(),
-    marks: [],
-    operations: [],
-    enabled: true,
-    apiCalls: {count: 0, totalTime: 0, calls: []},
-    cacheCalls: {count: 0, totalTime: 0, calls: []},
-    firstPaintTime: null,
-    reportPrinted: false,
-
-    mark(label) {
-        if (!this.enabled) return;
-        const now = performance.now();
-        const elapsed = now - this.startTime;
-        this.marks.push({label, time: now, elapsed});
-        // Use Performance API for DevTools integration
-        try {
-            performance.mark(`perf-${label.replace(/ /g, '-')}`);
-        } catch (e) {
-        }
-        console.log(`[PERF] ${elapsed.toFixed(2)}ms - ${label}`);
-    },
-
-    // Track Chrome API calls specifically
-    async trackApi(apiName, fn) {
-        if (!this.enabled) return fn();
-        const start = performance.now();
-        const result = await fn();
-        const duration = performance.now() - start;
-        this.apiCalls.count++;
-        this.apiCalls.totalTime += duration;
-        this.apiCalls.calls.push({api: apiName, duration});
-        console.log(`[PERF:API] ${apiName}: ${duration.toFixed(2)}ms`);
-        return result;
-    },
-
-    // Track any async operation
-    async track(label, fn) {
-        if (!this.enabled) return fn();
-        const start = performance.now();
-        const result = await fn();
-        const duration = performance.now() - start;
-        this.operations.push({label, duration, timestamp: start - this.startTime});
-        return result;
-    },
-
-    // Wait for actual browser paint and then print summary
-    waitForPaintAndReport() {
-        if (!this.enabled || this.reportPrinted) return;
-
-        // Use requestAnimationFrame to wait for next frame, then another to ensure paint
-        requestAnimationFrame(() => {
-            requestAnimationFrame(() => {
-                this.firstPaintTime = performance.now() - this.startTime;
-                this.mark('FIRST PAINT (bookmarks visible)');
-                this.summary();
-            });
-        });
-    },
-
-    summary() {
-        if (!this.enabled || this.reportPrinted) return;
-        this.reportPrinted = true;
-
-        const totalTime = performance.now() - this.startTime;
-
-        // Navigation timing (when did the page actually start loading?)
-        const navTiming = performance.getEntriesByType('navigation')[0];
-
-        // Resource timing for scripts
-        const resources = performance.getEntriesByType('resource');
-
-        console.log(PERF_SEPARATOR);
-        console.log('PERFORMANCE REPORT - Copy everything below this line');
-        console.log(PERF_SEPARATOR);
-
-        // Summary stats
-        console.log('\n📊 SUMMARY:');
-        console.log(`  Total time to first paint: ${this.firstPaintTime?.toFixed(2) || totalTime.toFixed(2)}ms`);
-        console.log(`  IndexedDB cache calls: ${this.cacheCalls.count} calls, ${this.cacheCalls.totalTime.toFixed(2)}ms total`);
-        console.log(`  Chrome API calls: ${this.apiCalls.count} calls, ${this.apiCalls.totalTime.toFixed(2)}ms total`);
-        if (navTiming) {
-            console.log(`  DOM Content Loaded: ${navTiming.domContentLoadedEventEnd.toFixed(2)}ms`);
-            console.log(`  Page Load Complete: ${navTiming.loadEventEnd.toFixed(2)}ms`);
-        }
-
-        // Pre-script delay breakdown
-        console.log('\n⏱️ PRE-SCRIPT DELAY BREAKDOWN:');
-        if (window.__earlyStylesTime) {
-            console.log(`  early-styles.js ran at: ${window.__earlyStylesTime.toFixed(2)}ms`);
-        }
-        console.log(`  newtab.js started at: ${this.startTime.toFixed(2)}ms`);
-        if (navTiming) {
-            console.log(`  HTML parsing: responseEnd=${navTiming.responseEnd.toFixed(2)}ms`);
-            console.log(`  DOM interactive: ${navTiming.domInteractive.toFixed(2)}ms`);
-        }
-
-        // Script loading times - filter with for loop
-        const scriptResources = [];
-        for (let i = 0, len = resources.length; i < len; i++) {
-            const r = resources[i];
-            if (r.name.endsWith('.js')) scriptResources.push(r);
-        }
-        if (scriptResources.length > 0) {
-            console.log('\n📜 SCRIPT LOADING:');
-            for (let i = 0, len = scriptResources.length; i < len; i++) {
-                const r = scriptResources[i];
-                const lastSlash = r.name.lastIndexOf('/');
-                const name = lastSlash >= 0 ? r.name.slice(lastSlash + 1) : r.name;
-                console.log(`  ${name}: start=${r.startTime.toFixed(1)}ms, duration=${r.duration.toFixed(1)}ms`);
-            }
-        }
-
-        // Timeline
-        console.log('\n📍 TIMELINE (marks):');
-        let prev = this.startTime;
-        for (let i = 0, len = this.marks.length; i < len; i++) {
-            const m = this.marks[i];
-            const delta = m.time - prev;
-            const bar = '█'.repeat(Math.min(Math.ceil(delta / 10), 50));
-            console.log(`  ${m.elapsed.toFixed(1).padStart(7)}ms | ${bar} +${delta.toFixed(1)}ms | ${m.label}`);
-            prev = m.time;
-        }
-
-        // Slow operations (>5ms) - filter with for loop, then sort
-        const slowOps = [];
-        for (let i = 0, len = this.operations.length; i < len; i++) {
-            const o = this.operations[i];
-            if (o.duration > 5) slowOps.push(o);
-        }
-        if (slowOps.length > 0) {
-            slowOps.sort((a, b) => b.duration - a.duration);
-            console.log('\n🐌 SLOW OPERATIONS (>5ms):');
-            for (let i = 0, len = slowOps.length; i < len; i++) {
-                const o = slowOps[i];
-                console.log(`  ${o.duration.toFixed(1).padStart(7)}ms | ${o.label}`);
-            }
-        }
-
-        // IndexedDB cache breakdown
-        if (this.cacheCalls.calls.length > 0) {
-            console.log('\n💾 INDEXEDDB CACHE CALLS:');
-            const sorted = this.cacheCalls.calls.toSorted((a, b) => b.duration - a.duration);
-            for (let i = 0, len = sorted.length; i < len; i++) {
-                const c = sorted[i];
-                const bar = '█'.repeat(Math.min(Math.ceil(c.duration / 10), 50));
-                console.log(`  ${c.duration.toFixed(1).padStart(7)}ms | ${bar} | ${c.api}`);
-            }
-        }
-
-        // Chrome API breakdown
-        if (this.apiCalls.calls.length > 0) {
-            console.log('\n🔌 CHROME API CALLS (special folders only, after first paint):');
-            const sorted = this.apiCalls.calls.toSorted((a, b) => b.duration - a.duration);
-            for (let i = 0, len = sorted.length; i < len; i++) {
-                const c = sorted[i];
-                const bar = '█'.repeat(Math.min(Math.ceil(c.duration / 10), 50));
-                console.log(`  ${c.duration.toFixed(1).padStart(7)}ms | ${bar} | ${c.api}`);
-            }
-        }
-
-        // Diagnosis
-        console.log('\n🔍 DIAGNOSIS:');
-
-        // Check pre-script delay
-        if (this.startTime > 100) {
-            console.log(`  ⚠️  ${this.startTime.toFixed(0)}ms before script starts`);
-            console.log(`     Breakdown of pre-script delay:`);
-            if (window.__earlyStylesTime) {
-                const cssLoadTime = window.__earlyStylesTime;
-                const scriptParseTime = this.startTime - window.__earlyStylesTime;
-                console.log(`     - CSS + early-styles.js load: ~${cssLoadTime.toFixed(0)}ms`);
-                console.log(`     - Deferred scripts parse: ~${scriptParseTime.toFixed(0)}ms`);
-            }
-            console.log(`     Note: Extension pages have inherent overhead (~50-150ms)`);
-        }
-
-        if (this.cacheCalls.totalTime > 100) {
-            console.log(`  ⚠️  IndexedDB cache taking ${this.cacheCalls.totalTime.toFixed(0)}ms`);
-        }
-        if (this.apiCalls.totalTime > 100) {
-            console.log(`  ⚠️  Chrome APIs taking ${this.apiCalls.totalTime.toFixed(0)}ms`);
-        }
-        // Calculate render time with single loop (faster than filter+reduce)
-        let renderTime = 0;
-        for (let i = 0, len = this.operations.length; i < len; i++) {
-            const o = this.operations[i];
-            if (o.label.includes('render')) renderTime += o.duration;
-        }
-        if (renderTime > 50) {
-            console.log(`  ⚠️  Rendering taking ${renderTime.toFixed(0)}ms`);
-        }
-        if (this.firstPaintTime && this.firstPaintTime < 100) {
-            console.log(`  ✅ First paint is fast (${this.firstPaintTime.toFixed(0)}ms)`);
-        } else if (this.firstPaintTime) {
-            console.log(`  ❌ First paint is slow (${this.firstPaintTime.toFixed(0)}ms) - target is <25ms`);
-        }
-
-        // Total time from navigation to first paint
-        const totalFromNav = this.startTime + (this.firstPaintTime || totalTime);
-        console.log(`\n📈 TOTAL TIME FROM NAVIGATION TO FIRST PAINT: ${totalFromNav.toFixed(0)}ms`);
-        if (totalFromNav > 25) {
-            console.log(`   Target: <25ms, Current: ${totalFromNav.toFixed(0)}ms`);
-            console.log(`   Need to reduce by: ${(totalFromNav - 25).toFixed(0)}ms`);
-        }
-
-        console.log(PERF_SEPARATOR);
-        console.log('END OF PERFORMANCE REPORT');
-        console.log(`${PERF_SEPARATOR}\n`);
-    }
-};
-
-// Record when we started relative to page navigation
-if (performance.getEntriesByType('navigation').length > 0) {
-    console.log(`[PERF] Script started at: ${Perf.startTime.toFixed(2)}ms after navigation`);
-}
-
-Perf.mark('Script start');
-
-// =============================================================================
 // SPECIAL FOLDERS - Unified handling for top sites, recent, closed, devices
 // =============================================================================
 
@@ -283,10 +57,6 @@ const SpecialFolders = {
         // All other special folders: read from cache only, no API fallback
         const cached = await BookmarkCache.getSpecialFolder(id);
         if (cached?.data) {
-            const status = cached.fresh ? 'fresh' : 'stale';
-            console.log(`[SpecialFolders] CACHE ${status}: ${id} (${cached.data.length} items)`);
-            Perf.cacheCalls.count++;
-            Perf.cacheCalls.calls.push({api: `cache.special:${id}`, duration: 0});
             return this._hydrateData(id, cached.data.slice(0, limit));
         }
 
@@ -299,19 +69,13 @@ const SpecialFolders = {
         // Try cache first
         const cached = await BookmarkCache.getSpecialFolder('top');
         if (cached?.fresh) {
-            console.log(`[SpecialFolders] CACHE HIT: top (${cached.data.length} items)`);
-            Perf.cacheCalls.count++;
-            Perf.cacheCalls.calls.push({api: `cache.special:top`, duration: 0});
             return cached.data.slice(0, limit);
         }
 
         // Cache miss or stale - fetch from API (only for 'top')
         if (!chrome.topSites) return [];
-        const reason = cached ? 'stale' : 'missing';
-        console.log(`[SpecialFolders] CACHE ${reason}: top - fetching from chrome.topSites`);
 
-        const freshData = await Perf.trackApi('chrome.topSites.get', () =>
-            chrome.topSites.get().then(r => r || []));
+        const freshData = await chrome.topSites.get().then(r => r || []);
 
         // Cache for next time
         BookmarkCache.setSpecialFolder('top', freshData).catch(e =>
@@ -382,13 +146,8 @@ async function checkCacheStatus() {
  * @returns {Promise<Array>} - Array of children
  */
 async function getFolderFromCache(id) {
-    const start = performance.now();
     try {
         const folder = await BookmarkCache.getFolder(id);
-        const duration = performance.now() - start;
-        Perf.cacheCalls.count++;
-        Perf.cacheCalls.totalTime += duration;
-        Perf.cacheCalls.calls.push({api: `cache.getFolder(${id})`, duration});
         return folder ? folder.children : [];
     } catch (e) {
         console.error(`[BookmarkCache] Error loading folder ${id}:`, e);
@@ -403,13 +162,8 @@ async function getFolderFromCache(id) {
  * @returns {Promise<Map<string, object>>}
  */
 async function getFoldersFromCache(ids) {
-    const start = performance.now();
     try {
         const folders = await BookmarkCache.getFolders(ids);
-        const duration = performance.now() - start;
-        Perf.cacheCalls.count++;
-        Perf.cacheCalls.totalTime += duration;
-        Perf.cacheCalls.calls.push({api: `cache.getFolders(${ids.length} ids)`, duration});
         return folders;
     } catch (e) {
         console.error(`[BookmarkCache] Error loading folders:`, e);
@@ -611,32 +365,30 @@ function renderAll(nodes, target, toplevel) {
 
 // render column with given index
 async function renderColumn(index, target) {
-    return Perf.track(`renderColumn(${index})`, async () => {
-        const ids = columns[index];
-        if (ids.length === 1 && !getConfig('show_root')) {
-            // Single folder with show_root=false: render children directly
-            const result = await getChildren({id: ids[0]});
-            renderAll(result, target);
-            addColumnHandlers(index, target);
-        } else if (ids.length > 0) {
-            const len = ids.length;
-            const promises = new Array(len);
-            for (let i = 0; i < len; i++) {
-                promises[i] = getSubTree(ids[i]);
-            }
-            const results = await Promise.all(promises);
-            // Flatten results with for loop (faster than flat())
-            const nodes = [];
-            for (let i = 0; i < len; i++) {
-                const arr = results[i];
-                for (let j = 0, jLen = arr.length; j < jLen; j++) {
-                    nodes.push(arr[j]);
-                }
-            }
-            renderAll(nodes, target, true);
-            addColumnHandlers(index, target);
+    const ids = columns[index];
+    if (ids.length === 1 && !getConfig('show_root')) {
+        // Single folder with show_root=false: render children directly
+        const result = await getChildren({id: ids[0]});
+        renderAll(result, target);
+        addColumnHandlers(index, target);
+    } else if (ids.length > 0) {
+        const len = ids.length;
+        const promises = new Array(len);
+        for (let i = 0; i < len; i++) {
+            promises[i] = getSubTree(ids[i]);
         }
-    });
+        const results = await Promise.all(promises);
+        // Flatten results with for loop (faster than flat())
+        const nodes = [];
+        for (let i = 0; i < len; i++) {
+            const arr = results[i];
+            for (let j = 0, jLen = arr.length; j < jLen; j++) {
+                nodes.push(arr[j]);
+            }
+        }
+        renderAll(nodes, target, true);
+        addColumnHandlers(index, target);
+    }
 }
 
 // Cached DOM element references (avoid repeated getElementById calls)
@@ -647,7 +399,6 @@ function getMainElement() {
 
 // render all columns to main div
 async function renderColumns() {
-    Perf.mark('renderColumns start');
     const target = getMainElement();
     target.replaceChildren(); // Modern way to clear children
 
@@ -702,7 +453,6 @@ async function expandDeferredFolders() {
     }
 
     await Promise.all(promises);
-    Perf.mark(`Expanded ${linkCount} deferred special folders`);
 }
 
 // enables click and context menu for given folder
@@ -1286,15 +1036,11 @@ function showCacheError(error) {
 
 // load columns from storage or default
 async function loadColumns() {
-    Perf.mark('loadColumns start');
-
     // Load ALL data into memory cache FIRST (single IndexedDB read)
     // This is faster than checking status first (which would be 2 separate reads)
     // After this, getCacheStatus() will use the in-memory cache (instant)
     try {
-        Perf.mark('loadAllData start');
         await BookmarkCache.loadAllData();
-        Perf.mark('loadAllData end');
     } catch (e) {
         console.error('[BookmarkCache] loadAllData failed:', e);
         showCacheError(e);
@@ -1309,8 +1055,6 @@ async function loadColumns() {
         return;
     }
 
-    Perf.mark('loadColumns: cache valid');
-
     columns = [];
     forEachColumnEntry((x, y, id) => {
         if (!columns[x]) columns[x] = [];
@@ -1321,7 +1065,6 @@ async function loadColumns() {
         verifyColumns();
         await renderColumns();
     } else {
-        Perf.mark('loadColumns: fetching root IDs from cache');
         const rootIds = await getRootFolderIds();
         // Build root array without concat (avoid intermediate array)
         const specialLen = special.length;
@@ -1334,22 +1077,14 @@ async function loadColumns() {
         verifyColumns();
         await renderColumns();
     }
-    Perf.mark('loadColumns end (DOM ready)');
 
-    // Wait for actual browser paint before printing report
-    // This ensures we measure when bookmarks are actually visible
+    // After first paint, expand deferred special folders (slow Chrome API calls)
     if (typeof requestAnimationFrame !== 'undefined') {
-        Perf.waitForPaintAndReport();
-
-        // After first paint, expand deferred special folders (slow Chrome API calls)
         requestAnimationFrame(() => {
             requestAnimationFrame(async () => {
                 await expandDeferredFolders();
-                Perf.mark('Finished loading');
             });
         });
-    } else {
-        Perf.summary();
     }
 }
 
@@ -1638,7 +1373,6 @@ function onChange(key, value) {
 
 // loads config settings
 function loadSettings() {
-    Perf.mark('loadSettings start');
     // Remove early-styles.js overrides so new settings can take effect
     document.getElementById('early-styles')?.remove();
     theme = themes[getConfig('theme')] ?? {};
@@ -1651,7 +1385,6 @@ function loadSettings() {
             onChange(key);
         }
     }
-    Perf.mark('loadSettings end');
 }
 
 // apply config values to input controls
