@@ -22,6 +22,10 @@ body {
 	padding: 0;
 	list-style: none;
 }
+#main > .column > ul > li > ul {
+	content-visibility: auto;
+	contain-intrinsic-size: auto 500px;
+}
 #main a + ul, #main a + div {
 	padding-left: 24px;
 }
