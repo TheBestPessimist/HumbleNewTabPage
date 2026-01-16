@@ -450,7 +450,7 @@ function render(node, target) {
 
     const li = document.createElement('li');
     const a = document.createElement('a');
-    const {url} = node;
+    const {url, children, id} = node;
 
     if (url) {
         a.href = url;
@@ -459,7 +459,7 @@ function render(node, target) {
     }
 
     let text = node.title || node.name || '';
-    if (!text && node.title === null) text = node.url || '';
+    if (!text && node.title === null) text = url || '';
     a.textContent = text;
 
     if (node.tooltip) a.title = node.tooltip;
@@ -479,7 +479,9 @@ function render(node, target) {
             };
         }
         // Handle chrome:// and file:/// urls that need special opening
-        if (url.startsWith('chrome') || url.startsWith('file:/')) {
+        // Use charCodeAt for faster check than startsWith
+        const firstChar = url.charCodeAt(0);
+        if (firstChar === 99 || firstChar === 102) { // 'c' or 'f'
             a.onclick = e => {
                 openLink(node, newtab || (e.ctrlKey ? 2 : 0));
                 return false;
@@ -491,16 +493,16 @@ function render(node, target) {
                 }
             };
         }
-    } else if (!node.children) {
+    } else if (!children) {
         a.style.pointerEvents = 'none';
     }
 
     li.appendChild(a);
 
     // folder
-    if (node.children) {
+    if (children) {
         // Store node ID for deferred loading (dataset may not exist in test env)
-        if (li.dataset) li.dataset.nodeId = node.id;
+        if (li.dataset) li.dataset.nodeId = id;
 
         // Check if this folder should auto-expand (show_root=false case)
         if (node.autoExpand && a.dataset) {
@@ -508,22 +510,22 @@ function render(node, target) {
         }
 
         // Check if folder should be open
-        const shouldBeOpen = a.open || (getConfig('remember_open') && localStorage.getItem(`open.${node.id}`));
+        const shouldBeOpen = a.open || (getConfig('remember_open') && localStorage.getItem(`open.${id}`));
         if (shouldBeOpen) {
             setClass(a, node, true);
             a.open = true;
             // If children are already loaded as an array, render them immediately
-            if (Array.isArray(node.children)) {
-                renderAll(node.children, li);
-            } else if (SpecialFolders.isFolder(node.id)) {
+            if (Array.isArray(children)) {
+                renderAll(children, li);
+            } else if (SpecialFolders.isFolder(id)) {
                 // Special folders require slow Chrome API calls - defer loading
                 a.dataset.deferred = 'true';
             } else {
                 // Regular bookmarks: fetch children from BookmarkCache (fast, in-memory)
                 (async () => {
-                    const children = await getChildren_internal(node.id);
+                    const folderChildren = await getChildren_internal(id);
                     if (a.open && !a.nextSibling) {
-                        renderAll(children, li);
+                        renderAll(folderChildren, li);
                     }
                 })();
             }
