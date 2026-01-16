@@ -1777,12 +1777,20 @@ function initSettings() {
             const select = document.getElementById('options_font');
             if (select.childNodes.length > 0) return;
 
-            [{fontId: 'Sans-serif'}, ...fonts].forEach(({fontId}) => {
+            const currentFont = getConfig('font');
+            // Add Sans-serif first
+            const defaultOption = document.createElement('option');
+            defaultOption.textContent = 'Sans-serif';
+            defaultOption.selected = 'Sans-serif' === currentFont;
+            select.append(defaultOption);
+            // Add remaining fonts
+            for (let i = 0, len = fonts.length; i < len; i++) {
+                const fontId = fonts[i].fontId;
                 const option = document.createElement('option');
                 option.textContent = fontId;
-                option.selected = fontId === getConfig('font');
-                select.appendChild(option);
-            });
+                option.selected = fontId === currentFont;
+                select.append(option);
+            }
         }
     });
 }
