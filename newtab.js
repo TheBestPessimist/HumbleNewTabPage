@@ -1401,7 +1401,9 @@ const configCache = new Map();
 
 // get config value or default (uses cache for performance)
 function getConfig(key) {
-    if (configCache.has(key)) return configCache.get(key);
+    // Use single get() call instead of has() + get() to avoid double lookup
+    const cached = configCache.get(key);
+    if (cached !== undefined) return cached;
 
     const value = localStorage.getItem(`options.${key}`);
     let result;
