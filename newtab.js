@@ -1431,12 +1431,14 @@ function setConfig(key, value) {
     } else if (key === 'theme') {
         theme = themes[value];
         configCache.clear(); // Theme affects all config defaults
-        Object.keys(config).forEach(k => {
+        const configKeys = Object.keys(config);
+        for (let i = 0, len = configKeys.length; i < len; i++) {
+            const k = configKeys[i];
             if (k !== key) {
                 onChange(k);
                 showConfig(k);
             }
-        });
+        }
     } else if (key.startsWith('show')) {
         const id = key.substring(5);
         if (!value && coords[id]) {
@@ -1541,13 +1543,15 @@ function loadSettings() {
     // Remove early-styles.js overrides so new settings can take effect
     document.getElementById('early-styles')?.remove();
     theme = themes[getConfig('theme')] ?? {};
-    Object.keys(config).forEach(key => {
+    const configKeys = Object.keys(config);
+    for (let i = 0, len = configKeys.length; i < len; i++) {
+        const key = configKeys[i];
         if (key === 'background_image_file') {
             setTimeout(() => onChange('background_image_file'), 0);
         } else {
             onChange(key);
         }
-    });
+    }
     Perf.mark('loadSettings end');
 }
 
