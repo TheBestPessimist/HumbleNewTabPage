@@ -68,6 +68,7 @@ body {
 	will-change: height, opacity;
 	transform: translateZ(0);
 	backface-visibility: hidden;
+	overflow: hidden;
 }
 .column {
 	display: inline-block;
