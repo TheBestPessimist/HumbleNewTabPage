@@ -88,30 +88,17 @@ async function checkAndSync() {
 // All bookmark changes trigger a full resync
 // This is simpler and more reliable than incremental updates
 
-chrome.bookmarks.onCreated.addListener((id, bookmark) => {
-    console.log(`[BookmarkCache] Bookmark created: ${id}`);
-    triggerSync('bookmark-created');
-});
+// Use single handler factory to reduce code duplication
+const createBookmarkHandler = (eventName, reason) => (id) => {
+    console.log(`[BookmarkCache] ${eventName}: ${id}`);
+    triggerSync(reason);
+};
 
-chrome.bookmarks.onRemoved.addListener((id, removeInfo) => {
-    console.log(`[BookmarkCache] Bookmark removed: ${id}`);
-    triggerSync('bookmark-removed');
-});
-
-chrome.bookmarks.onChanged.addListener((id, changeInfo) => {
-    console.log(`[BookmarkCache] Bookmark changed: ${id}`);
-    triggerSync('bookmark-changed');
-});
-
-chrome.bookmarks.onMoved.addListener((id, moveInfo) => {
-    console.log(`[BookmarkCache] Bookmark moved: ${id}`);
-    triggerSync('bookmark-moved');
-});
-
-chrome.bookmarks.onChildrenReordered.addListener((id, reorderInfo) => {
-    console.log(`[BookmarkCache] Children reordered: ${id}`);
-    triggerSync('children-reordered');
-});
+chrome.bookmarks.onCreated.addListener(createBookmarkHandler('Bookmark created', 'bookmark-created'));
+chrome.bookmarks.onRemoved.addListener(createBookmarkHandler('Bookmark removed', 'bookmark-removed'));
+chrome.bookmarks.onChanged.addListener(createBookmarkHandler('Bookmark changed', 'bookmark-changed'));
+chrome.bookmarks.onMoved.addListener(createBookmarkHandler('Bookmark moved', 'bookmark-moved'));
+chrome.bookmarks.onChildrenReordered.addListener(createBookmarkHandler('Children reordered', 'children-reordered'));
 
 // =============================================================================
 // EXTENSION LIFECYCLE EVENTS
