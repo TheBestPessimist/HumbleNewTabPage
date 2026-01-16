@@ -128,18 +128,21 @@ async function syncClosedTabs(reason) {
     try {
         // Get max 20 recently closed (we'll slice to user preference in newtab.js)
         const sessions = await chrome.sessions.getRecentlyClosed({ maxResults: 20 });
-        const closed = sessions.map(session => {
+        const len = sessions.length;
+        const closed = new Array(len);
+        for (let i = 0; i < len; i++) {
+            const session = sessions[i];
             // Normalize window with single tab to just a tab
             if (session.window?.tabs.length === 1) {
                 session.tab = session.window.tabs[0];
             }
-            return {
+            closed[i] = {
                 sessionId: session.window ? session.window.sessionId : session.tab.sessionId,
                 title: session.tab ? session.tab.title : `${session.window.tabs.length} Tabs`,
                 url: session.tab?.url ?? null,
                 isWindow: !!session.window
             };
-        });
+        }
         await BookmarkCache.setSpecialFolder('closed', closed);
         console.log(`[Sessions] Cached ${closed.length} closed tabs (reason: ${reason})`);
     } catch (error) {
