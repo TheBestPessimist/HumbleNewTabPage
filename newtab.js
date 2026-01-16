@@ -340,7 +340,12 @@ const SpecialFolders = {
 
 // Convenience references
 const special = SpecialFolders.all;
-const specialFolderIds = special.filter(id => SpecialFolders.isFolder(id));
+// Use for loop for better performance
+const specialFolderIds = [];
+for (let i = 0, len = special.length; i < len; i++) {
+    const id = special[i];
+    if (SpecialFolders.isFolder(id)) specialFolderIds.push(id);
+}
 
 // =============================================================================
 // BOOKMARK LOADING - Load from IndexedDB cache (populated by service worker)
