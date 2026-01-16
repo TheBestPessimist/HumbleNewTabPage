@@ -198,9 +198,11 @@ const BookmarkCache = {
                 resolve();
             };
 
-            records.forEach(({key, value}) => {
+            // Use for loop for better performance
+            for (let i = 0, len = records.length; i < len; i++) {
+                const {key, value} = records[i];
                 store.put({...value, key});
-            });
+            }
         });
     },
 
@@ -219,19 +221,21 @@ const BookmarkCache = {
             tx.oncomplete = () => {
                 // Rebuild cache from the records we just wrote
                 this._allDataCache = new Map();
-                records.forEach(({key, value}) => {
+                for (let i = 0, len = records.length; i < len; i++) {
+                    const {key, value} = records[i];
                     this._allDataCache.set(key, {...value, key});
-                });
+                }
                 resolve();
             };
 
             // Clear all existing data first
             store.clear();
 
-            // Then add all new records
-            records.forEach(({key, value}) => {
+            // Then add all new records - use for loop for performance
+            for (let i = 0, len = records.length; i < len; i++) {
+                const {key, value} = records[i];
                 store.put({...value, key});
-            });
+            }
         });
     },
 
