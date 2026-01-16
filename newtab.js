@@ -1250,7 +1250,7 @@ function verifyColumns() {
     // add missing root items - use for loop for performance
     for (let i = 0, len = missing.length; i < len; i++) {
         const id = missing[i];
-        if (getConfig('show_' + id)) {
+        if (getConfig(`show_${id}`)) {
             columns[0].push(id);
         }
     }
