@@ -464,7 +464,7 @@ function render(node, target) {
 
     if (node.tooltip) a.title = node.tooltip;
     setClass(a, node);
-    a.insertBefore(getIcon(node), a.firstChild);
+    a.prepend(getIcon(node)); // Modern API, cleaner than insertBefore
 
     if (node.action) {
         a.onclick = e => node.action(e);
