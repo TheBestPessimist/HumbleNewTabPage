@@ -129,9 +129,10 @@ const Perf = {
         const slowOps = this.operations.filter(o => o.duration > 5).toSorted((a, b) => b.duration - a.duration);
         if (slowOps.length > 0) {
             console.log('\n🐌 SLOW OPERATIONS (>5ms):');
-            slowOps.forEach(o => {
+            for (let i = 0, len = slowOps.length; i < len; i++) {
+                const o = slowOps[i];
                 console.log(`  ${o.duration.toFixed(1).padStart(7)}ms | ${o.label}`);
-            });
+            }
         }
 
         // IndexedDB cache breakdown
