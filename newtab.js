@@ -841,8 +841,17 @@ function getIcon(node) {
         }
     } else if (node.icon) {
         url = node.icon;
-    } else if (node.url && typeof FaviconCache !== 'undefined') {
-        return FaviconCache.createIcon(node.url, 16);
+    } else if (node.url) {
+        // Use Chrome's built-in favicon cache
+        const img = document.createElement('img');
+        img.className = 'icon';
+        img.alt = '';
+        img.width = 16;
+        img.height = 16;
+        img.loading = 'lazy';
+        img.decoding = 'async';
+        img.src = `/_favicon/?pageUrl=${encodeURIComponent(node.url)}&size=16`;
+        return img;
     }
 
     const icon = document.createElement(url ? 'img' : 'div');
