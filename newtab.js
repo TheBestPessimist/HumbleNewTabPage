@@ -125,9 +125,14 @@ const Perf = {
             prev = m.time;
         }
 
-        // Slow operations (>5ms) - use toSorted for non-mutating sort
-        const slowOps = this.operations.filter(o => o.duration > 5).toSorted((a, b) => b.duration - a.duration);
+        // Slow operations (>5ms) - filter with for loop, then sort
+        const slowOps = [];
+        for (let i = 0, len = this.operations.length; i < len; i++) {
+            const o = this.operations[i];
+            if (o.duration > 5) slowOps.push(o);
+        }
         if (slowOps.length > 0) {
+            slowOps.sort((a, b) => b.duration - a.duration);
             console.log('\n🐌 SLOW OPERATIONS (>5ms):');
             for (let i = 0, len = slowOps.length; i < len; i++) {
                 const o = slowOps[i];
