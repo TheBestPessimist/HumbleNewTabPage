@@ -1,4 +1,4 @@
-- [ ] performance: We are doing an ongoing process where we take a 'papercuts' style approach where we find little things that can improve the performance of the extension throughout the whole codebase, then fix each of them, one by one. Find a papercut, fix it, then commit.
+- [ ] performance: We are doing an ongoing process where we take a 'papercuts' style approach where we find small to medium things that can improve the performance of the extension throughout the whole codebase, then fix each of them one by one. Find a papercut, fix it, then commit.
 
 The following are non-negotiable constraints that must be taken into account when doing the changes:
 - the extension must be FAST in doing its job (otherwise this extension will be useless)
@@ -15,6 +15,7 @@ More hints:
 - think VERY HARD before making a change: does it improve something, or is it just change for the sake of change?
 - always prefer `template literal` instead of string concat. We're not in the fucking jungle here
 - NEVER refactor to use `charCodeAt` as it doesn't improve perf, instead it increases the code complexity TREMENDOUSLY
+- do NOT use subagents
 - focus on performance:
     - Reducing DOM operations
     - Caching expensive lookups
