@@ -145,10 +145,10 @@ const BookmarkCache = {
         const keys = folderIds.map(id => `folder:${id}`);
         const records = await this.getMany(keys);
         const result = new Map();
-        records.forEach((value, key) => {
-            const id = key.replace('folder:', '');
-            result.set(id, value);
-        });
+        // Use for...of instead of forEach for better performance
+        for (const [key, value] of records) {
+            result.set(key.slice(7), value); // 'folder:'.length === 7
+        }
         return result;
     },
 
