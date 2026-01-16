@@ -386,11 +386,10 @@ async function getFolderFromCache(id) {
     try {
         const folder = await BookmarkCache.getFolder(id);
         const duration = performance.now() - start;
-        const children = folder?.children || [];
         Perf.cacheCalls.count++;
         Perf.cacheCalls.totalTime += duration;
         Perf.cacheCalls.calls.push({api: `cache.getFolder(${id})`, duration});
-        return children;
+        return folder ? folder.children : [];
     } catch (e) {
         console.error(`[BookmarkCache] Error loading folder ${id}:`, e);
         cacheLoadError = e;
