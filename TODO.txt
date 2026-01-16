@@ -8,3 +8,13 @@ The following are non-negotiable constraints:
 For every individual papercut fixed, i want you to make a commit explaining what was changed and how it improved. Keep the number of words in the commit message under 100.
 DO NOT STOP until you've fixed at least 50.
 As this is  an ongoing process, continue with the next batch of papercut fixes. Check the git commit and resume where you left off. (ie: if last commit's papercut was #51, then you continue with #52)
+
+More hints:
+- In the HumbleNewTabPage project, always run tests after making changes using the command: npm test
+- We are targeting modern browsers with modern features, therefore use modern J, HTML and CSS patterns
+- Focus on performance:
+    - Reducing DOM operations
+    - Caching expensive lookups
+    - Avoiding unnecessary reflows
+    - Optimizing hot loops
+    - Reducing memory allocations in critical paths
