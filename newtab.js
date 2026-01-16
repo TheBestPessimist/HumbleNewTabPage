@@ -713,7 +713,7 @@ function getMenuItems(node) {
         items.push({label: 'Clear browsing data', action: () => openLink({url: 'chrome://settings/clearBrowserData'}, 1)});
     if (node.id === 'devices')
         items.push({label: 'History', action: () => openLink({url: 'chrome://history'}, 1)});
-    if (Number(node.id))
+    if (+node.id > 0)
         items.push({label: 'Edit bookmarks', action: () => openLink({url: `chrome://bookmarks/?id=${node.id}`}, 1)});
     return items;
 }
