@@ -434,8 +434,10 @@ async function getRootFolderIds() {
 function forEachColumnEntry(fn) {
     for (let x = 0; ; x++) {
         let foundInRow = false;
+        // Build key prefix once per row (string concat faster than template literals in hot loops)
+        const rowPrefix = 'column.' + x + '.';
         for (let y = 0; ; y++) {
-            const id = localStorage.getItem(`column.${x}.${y}`);
+            const id = localStorage.getItem(rowPrefix + y);
             if (id) {
                 foundInRow = true;
                 if (fn?.(x, y, id) === false) return;
