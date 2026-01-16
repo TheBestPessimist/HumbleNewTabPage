@@ -1262,25 +1262,26 @@ function setConfig(key, value) {
 // map config keys to styles
 const styles = {};
 
-// Style schema: maps config keys to CSS generation rules
+// Style schema: maps config keys to CSS generation functions
+// Each function takes a value and returns a CSS string (or null to skip)
 const styleSchema = {
-    font: {sel: '#main a', prop: 'font-family', fmt: v => `"${v}"`},
-    font_size: {sel: '#main a', prop: 'font-size', fmt: v => `${v / 10}em`},
-    font_weight: {sel: '#main a', prop: 'font-weight'},
-    font_color: {sel: '#main a', prop: 'color'},
-    background_color: {sel: 'body', prop: 'background-color'},
-    background_image: {sel: 'body', prop: 'background-image', fmt: v => `url(${v})`},
-    background_image_file: {sel: 'body', prop: 'background-image', fmt: v => `url(${v})`},
-    background_align: {sel: 'body', prop: 'background-position'},
-    background_repeat: {sel: 'body', prop: 'background-repeat'},
-    background_size: {sel: 'body', prop: 'background-size'},
-    highlight_font_color: {sel: '#main a:hover', prop: 'color'},
-    highlight_color: {sel: '#main a:hover', prop: 'background-color'},
+    font: v => `#main a { font-family: "${v}"; }`,
+    font_size: v => `#main a { font-size: ${v / 10}em; }`,
+    font_weight: v => `#main a { font-weight: ${v}; }`,
+    font_color: v => `#main a { color: ${v}; }`,
+    background_color: v => `body { background-color: ${v}; }`,
+    background_image: v => `body { background-image: url(${v}); }`,
+    background_image_file: v => `body { background-image: url(${v}); }`,
+    background_align: v => `body { background-position: ${v}; }`,
+    background_repeat: v => `body { background-repeat: ${v}; }`,
+    background_size: v => `body { background-size: ${v}; }`,
+    highlight_font_color: v => `#main a:hover { color: ${v}; }`,
+    highlight_color: v => `#main a:hover { background-color: ${v}; }`,
     shadow_color: v => `#main a:hover { box-shadow: 0 0 ${scale(getConfig('shadow_blur'), 7, 100)}px ${v}; }`,
     shadow_blur: v => `#main a:hover { box-shadow: 0 0 ${scale(v, 7, 100)}px ${getConfig('shadow_color')}; }`,
-    highlight_round: {sel: '#main a', prop: 'border-radius', fmt: v => `${scale(v, 0.2, 1.5)}em`},
-    fade: {sel: '#main a', prop: 'transition-duration', fmt: v => `${scale(v, 0.2, 1)}s`},
-    slide: {sel: '.wrap', prop: 'transition-duration', fmt: v => `${scale(v, 0.2, 1)}s`},
+    highlight_round: v => `#main a { border-radius: ${scale(v, 0.2, 1.5)}em; }`,
+    fade: v => `#main a { transition-duration: ${scale(v, 0.2, 1)}s; }`,
+    slide: v => `.wrap { transition-duration: ${scale(v, 0.2, 1)}s; }`,
     spacing: v => `#main a { line-height: ${scale(v, 2, 5.6, 0.8)}; padding-left: ${scale(v, 0.8, 2, 0.4)}em; padding-right: ${scale(v, 0.8, 2, 0.4)}em; }`,
     width: v => `#main { width: ${getConfig('auto_scale') ? `${scale(v, 80, 100, 20)}%` : `${scale(v, 1000, 3000, 400)}px`}; }`,
     h_pos: v => {
@@ -1294,13 +1295,8 @@ const styleSchema = {
 };
 
 function getStyle(key, value) {
-    const schema = styleSchema[key];
-    if (!schema) return null;
-
-    if (typeof schema === 'function') return schema(value);
-
-    const formattedValue = schema.fmt ? schema.fmt(value) : value;
-    return `${schema.sel} { ${schema.prop}: ${formattedValue}; }`;
+    const fn = styleSchema[key];
+    return fn ? fn(value) : null;
 }
 
 // scales input value from [0,1,2] to [min,mid,max]
