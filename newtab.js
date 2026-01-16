@@ -1151,31 +1151,25 @@ async function toggle(node, a) {
 
 // smoothly open or close folder
 function animate(node, a, isopen) {
-    // TODO: fix nested animations
     // wrapper needed for inner height value
     let wrap = a.nextSibling;
-    const inner = wrap.firstChild; // Cache firstChild reference
+    const inner = wrap.firstChild;
+    const wrapStyle = wrap.style;
     if (a.animationHandle) {
-        // clear last animation
         clearTimeout(a.animationHandle);
         a.animationHandle = null;
     } else {
-        // start animation
-        Object.assign(wrap.style, {
-            height: isopen ? `${inner.clientHeight}px` : '0',
-            opacity: isopen ? '1' : '0'
-        });
+        wrapStyle.height = isopen ? `${inner.clientHeight}px` : '0';
+        wrapStyle.opacity = isopen ? '1' : '0';
     }
     // requestAnimationFrame twice to ensure at least one frame has passed
     requestAnimationFrame(() => {
         requestAnimationFrame(() => {
             if (wrap) {
                 wrap.className = 'wrap';
-                Object.assign(wrap.style, {
-                    height: isopen ? '0' : `${inner.clientHeight}px`,
-                    opacity: isopen ? '0' : '1',
-                    pointerEvents: isopen ? 'none' : null
-                });
+                wrapStyle.height = isopen ? '0' : `${inner.clientHeight}px`;
+                wrapStyle.opacity = isopen ? '0' : '1';
+                wrapStyle.pointerEvents = isopen ? 'none' : '';
             }
         });
     });
