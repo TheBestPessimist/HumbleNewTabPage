@@ -239,14 +239,17 @@ const SpecialFolders = {
     // All special IDs (for iteration)
     all: ['top', 'recent', 'closed', 'devices'],
 
-    // Check if an ID is a special folder
+    // Pre-computed Set for O(1) lookups (all special folders are also folders)
+    _specialSet: new Set(['top', 'recent', 'closed', 'devices']),
+
+    // Check if an ID is a special folder (O(1) Set lookup)
     isFolder(id) {
-        return this.defs[id]?.isFolder;
+        return this._specialSet.has(id);
     },
 
-    // Check if an ID is any special type
+    // Check if an ID is any special type (O(1) Set lookup)
     isSpecial(id) {
-        return !!this.defs[id];
+        return this._specialSet.has(id);
     },
 
     // Get node definition for rendering
