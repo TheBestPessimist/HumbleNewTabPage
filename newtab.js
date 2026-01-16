@@ -725,15 +725,17 @@ function renderMenu(items, x, y) {
     const ul = document.createElement('ul');
     ul.className = 'menu';
 
-    items.forEach((item, i) => {
+    // Use for loop for better performance
+    for (let i = 0, len = items.length; i < len; i++) {
+        const item = items[i];
         if (!item) {
             // Spacer - only add if not at start or end
-            if (i > 0 && i < items.length - 1) {
+            if (i > 0 && i < len - 1) {
                 const li = document.createElement('li');
                 li.append(document.createElement('hr'));
                 ul.append(li);
             }
-            return;
+            continue;
         }
         const li = document.createElement('li');
         const a = document.createElement('a');
@@ -745,7 +747,7 @@ function renderMenu(items, x, y) {
         };
         li.append(a);
         ul.append(li);
-    });
+    }
 
     document.body.append(ul);
     ul.style.left = `${Math.max(Math.min(x, window.innerWidth + window.scrollX - ul.clientWidth), 0)}px`;
