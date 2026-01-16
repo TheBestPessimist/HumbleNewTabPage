@@ -145,7 +145,6 @@ const BookmarkCache = {
         const keys = folderIds.map(id => `folder:${id}`);
         const records = await this.getMany(keys);
         const result = new Map();
-        // Use for...of instead of forEach for better performance
         for (const [key, value] of records) {
             result.set(key.slice(7), value); // 'folder:'.length === 7
         }
@@ -191,9 +190,10 @@ const BookmarkCache = {
             tx.oncomplete = () => {
                 // Update cache in-place if it exists
                 if (this._allDataCache) {
-                    records.forEach(({key, value}) => {
+                    for (let i = 0; i < records.length; i++){
+                        const {key, value} = records[i];
                         this._allDataCache.set(key, {...value, key});
-                    });
+                    }
                 }
                 resolve();
             };
@@ -322,16 +322,20 @@ const BookmarkCache = {
                 });
 
                 // Recursively process child folders
-                (node.children || []).forEach(child => {
+                for (let i = 0; i < (node.children || []).length; i++){
+                    const child = (node.children || [])[i];
                     if (!child.url) {
                         processNode(child, node.id);
                     }
-                });
+                }
             }
         }
 
         // Process root nodes
-        tree.forEach(node => processNode(node));
+        for (let i = 0; i < tree.length; i++) {
+            const node = tree[i];
+            processNode(node);
+        }
 
         return records;
     },
@@ -402,11 +406,17 @@ const BookmarkCache = {
                 });
             }
             if (node.children) {
-                node.children.forEach(collectBookmarks);
+                for (let i = 0; i < node.children.length; i++) {
+                    const node = node.children[i];
+                    collectBookmarks(node);
+                }
             }
         }
 
-        tree.forEach(collectBookmarks);
+        for (let i = 0; i < tree.length; i++) {
+            const node = tree[i];
+            collectBookmarks(node);
+        }
 
         // Sort by dateAdded descending and take top N
         bookmarks.sort((a, b) => b.dateAdded - a.dateAdded);
