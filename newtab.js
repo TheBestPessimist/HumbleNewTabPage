@@ -1326,7 +1326,12 @@ async function loadColumns() {
     } else {
         Perf.mark('loadColumns: fetching root IDs from cache');
         const rootIds = await getRootFolderIds();
-        root = special.concat(rootIds);
+        // Build root array without concat (avoid intermediate array)
+        const specialLen = special.length;
+        const rootIdsLen = rootIds.length;
+        root = new Array(specialLen + rootIdsLen);
+        for (let i = 0; i < specialLen; i++) root[i] = special[i];
+        for (let i = 0; i < rootIdsLen; i++) root[specialLen + i] = rootIds[i];
         verifyColumns();
         await renderColumns();
     }
