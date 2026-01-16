@@ -648,26 +648,31 @@ async function renderColumns() {
 // Special folders (top, recent, closed, devices) require slow Chrome API calls
 async function expandDeferredFolders() {
     // Handle deferred special folders (marked with data-deferred="true")
-    const deferredLinks = [...document.querySelectorAll('#main a.folder[data-deferred="true"]')];
-    if (deferredLinks.length === 0) return;
+    const deferredLinks = document.querySelectorAll('#main a.folder[data-deferred="true"]');
+    const linkCount = deferredLinks.length;
+    if (linkCount === 0) return;
 
-    console.log(`[expandDeferredFolders] Loading ${deferredLinks.length} special folders`);
+    console.log(`[expandDeferredFolders] Loading ${linkCount} special folders`);
 
-    const promises = deferredLinks.map(async (a) => {
-        const li = a.parentNode;
-        const nodeId = li?.dataset?.nodeId;
-        if (!nodeId || !a.open || a.nextSibling) return;
+    const promises = new Array(linkCount);
+    for (let i = 0; i < linkCount; i++) {
+        const a = deferredLinks[i];
+        promises[i] = (async () => {
+            const li = a.parentNode;
+            const nodeId = li?.dataset?.nodeId;
+            if (!nodeId || !a.open || a.nextSibling) return;
 
-        delete a.dataset.deferred;
-        const folderName = a.textContent || nodeId;
-        const children = await getChildren({id: nodeId, children: true}, folderName);
-        if (a.open && !a.nextSibling) {
-            renderAll(children, li);
-        }
-    });
+            delete a.dataset.deferred;
+            const folderName = a.textContent || nodeId;
+            const children = await getChildren({id: nodeId, children: true}, folderName);
+            if (a.open && !a.nextSibling) {
+                renderAll(children, li);
+            }
+        })();
+    }
 
     await Promise.all(promises);
-    Perf.mark(`Expanded ${deferredLinks.length} deferred special folders`);
+    Perf.mark(`Expanded ${linkCount} deferred special folders`);
 }
 
 // enables click and context menu for given folder
