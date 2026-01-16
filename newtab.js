@@ -1280,12 +1280,13 @@ function saveColumns() {
     // clear previous config
     forEachColumnEntry((x, y) => localStorage.removeItem(`column.${x}.${y}`));
     verifyColumns();
-    // save new config
-    columns.forEach((col, x) => {
-        col.forEach((id, y) => {
-            localStorage.setItem(`column.${x}.${y}`, id);
-        });
-    });
+    // save new config - use for loops for better performance
+    for (let x = 0, xLen = columns.length; x < xLen; x++) {
+        const col = columns[x];
+        for (let y = 0, yLen = col.length; y < yLen; y++) {
+            localStorage.setItem(`column.${x}.${y}`, col[y]);
+        }
+    }
     loadColumns();
 }
 

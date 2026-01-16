@@ -407,8 +407,8 @@ const BookmarkCache = {
             }
             if (node.children) {
                 for (let i = 0; i < node.children.length; i++) {
-                    const node = node.children[i];
-                    collectBookmarks(node);
+                    const child = node.children[i];
+                    collectBookmarks(child);
                 }
             }
         }
