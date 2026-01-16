@@ -460,7 +460,7 @@ function render(node, target) {
 
     let text = node.title || node.name || '';
     if (!text && node.title === null) text = node.url || '';
-    a.innerText = text;
+    a.textContent = text;
 
     if (node.tooltip) a.title = node.tooltip;
     setClass(a, node);
@@ -725,7 +725,7 @@ function renderMenu(items, x, y) {
         }
         const li = document.createElement('li');
         const a = document.createElement('a');
-        a.innerText = item.label;
+        a.textContent = item.label;
         a.tabIndex = 0;
         a.onclick = () => {
             item.action();
@@ -1466,7 +1466,7 @@ function onChange(key, value) {
         if (css) {
             const style = styles[key] ?? (styles[key] = document.createElement('style'));
             document.head.appendChild(style);
-            style.innerText = css;
+            style.textContent = css;
         }
     } else if (key in styles) {
         styles[key].remove();
@@ -1645,7 +1645,7 @@ function initSettings() {
             config[key] = 1;
 
             const span = document.createElement('span');
-            span.innerText = node.title;
+            span.textContent = node.title;
 
             const input = document.createElement('input');
             input.type = 'checkbox';
@@ -1674,7 +1674,7 @@ function initSettings() {
         if (themeSelect.childNodes.length === 0) {
             Object.keys(themes).forEach(name => {
                 const option = document.createElement('option');
-                option.innerText = name;
+                option.textContent = name;
                 option.selected = name === getConfig('theme');
                 themeSelect.appendChild(option);
             });
@@ -1688,7 +1688,7 @@ function initSettings() {
 
             [{fontId: 'Sans-serif'}, ...fonts].forEach(({fontId}) => {
                 const option = document.createElement('option');
-                option.innerText = fontId;
+                option.textContent = fontId;
                 option.selected = fontId === getConfig('font');
                 select.appendChild(option);
             });
