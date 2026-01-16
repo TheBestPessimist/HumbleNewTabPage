@@ -422,10 +422,10 @@ async function getChildren_internal(id) {
 
     // Regular bookmarks: load from BookmarkCache (uses in-memory cache)
     const children = await getFolderFromCache(id);
-    // Mark folders (items with isFolder flag)
-    children.forEach(child => {
-        if (child.isFolder) child.children = true;
-    });
+    // Mark folders (items with isFolder flag) - use for loop for performance
+    for (let i = 0, len = children.length; i < len; i++) {
+        if (children[i].isFolder) children[i].children = true;
+    }
     return children;
 }
 
@@ -542,10 +542,12 @@ function renderAll(nodes, target, toplevel) {
     const fragment = document.createDocumentFragment();
     const ul = document.createElement('ul');
 
-    nodes.forEach(node => {
+    // Use for loop instead of forEach for better performance in hot path
+    for (let i = 0, len = nodes.length; i < len; i++) {
+        const node = nodes[i];
         // skip extensions and duplicated child folders
         if (toplevel || !coords[node.id]) render(node, ul);
-    });
+    }
     if (ul.childNodes.length === 0) {
         render({id: 'empty', title: '< Empty >'}, ul);
     }
