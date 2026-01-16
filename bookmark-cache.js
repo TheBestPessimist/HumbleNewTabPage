@@ -142,7 +142,11 @@ const BookmarkCache = {
      * @returns {Promise<Map<string, object>>}
      */
     async getFolders(folderIds) {
-        const keys = folderIds.map(id => `folder:${id}`);
+        const len = folderIds.length;
+        const keys = new Array(len);
+        for (let i = 0; i < len; i++) {
+            keys[i] = `folder:${folderIds[i]}`;
+        }
         const records = await this.getMany(keys);
         const result = new Map();
         for (const [key, value] of records) {
