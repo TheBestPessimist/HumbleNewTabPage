@@ -9,6 +9,7 @@ body {
 	font-size: 62.5%;
 	line-height: 1;
 	text-rendering: optimizeSpeed;
+	font-synthesis: none;
 }
 #main {
 	width: 80%;
