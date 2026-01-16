@@ -1284,9 +1284,11 @@ function saveColumns() {
 
 // removes ids from columns, returns adjusted {xpos, ypos} if provided
 function removeIdsFromColumns(ids, xpos, ypos) {
+    // Use Set for O(1) lookup instead of O(n) array includes
+    const idSet = new Set(ids);
     for (let x = 0; x < columns.length; x++) {
         for (let y = columns[x].length - 1; y >= 0; y--) {
-            if (ids.includes(columns[x][y])) {
+            if (idSet.has(columns[x][y])) {
                 columns[x].splice(y, 1);
                 if (xpos !== undefined && x === xpos && ypos > y) ypos--;
             }
