@@ -444,7 +444,7 @@ function forEachColumnEntry(fn) {
             const id = localStorage.getItem(`column.${x}.${y}`);
             if (id) {
                 foundInRow = true;
-                if (fn?.(x, y, id) === false) return;
+                if (fn(x, y, id) === false) return;
             } else {
                 break;
             }
