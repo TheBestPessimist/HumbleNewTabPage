@@ -601,8 +601,20 @@ async function renderColumn(index, target) {
             renderAll(result, target);
             addColumnHandlers(index, target);
         } else if (ids.length > 0) {
-            const results = await Promise.all(ids.map(id => getSubTree(id)));
-            const nodes = results.flat();
+            const len = ids.length;
+            const promises = new Array(len);
+            for (let i = 0; i < len; i++) {
+                promises[i] = getSubTree(ids[i]);
+            }
+            const results = await Promise.all(promises);
+            // Flatten results with for loop (faster than flat())
+            const nodes = [];
+            for (let i = 0; i < len; i++) {
+                const arr = results[i];
+                for (let j = 0, jLen = arr.length; j < jLen; j++) {
+                    nodes.push(arr[j]);
+                }
+            }
             renderAll(nodes, target, true);
             addColumnHandlers(index, target);
         }
