@@ -971,12 +971,8 @@ function getDropX(target) {
     }
     if (!target) return null;
 
-    let x = 0;
-    while (target.previousSibling) {
-        x++;
-        target = target.previousSibling;
-    }
-    return x;
+    // Use Array.prototype.indexOf for O(1) lookup instead of O(n) sibling traversal
+    return Array.prototype.indexOf.call(target.parentNode.children, target);
 }
 
 // gets y coordinate of drop target
