@@ -730,7 +730,7 @@ function addFolderHandlers(node, a) {
                 items.push({label: 'Move folder left', action: () => addRow(node.id, pos.x - 1)});
             if (pos.x < columns.length - 1)
                 items.push({label: 'Move folder right', action: () => addRow(node.id, pos.x + 1)});
-            if (!root.includes(node.id))
+            if (!rootSet?.has(node.id))
                 items.push({label: 'Remove folder', action: () => removeRow(pos.x, pos.y)});
         }
     }
@@ -1219,6 +1219,7 @@ function openLink(node, newtab) {
 
 let columns; // columns[x][y] = id
 let root;    // root[] = id
+let rootSet; // Set for O(1) root lookups
 let coords;  // coords[id] = {x, y}
 
 // ensure root folders are included
@@ -1339,6 +1340,8 @@ async function loadColumns() {
         root = new Array(specialLen + rootIdsLen);
         for (let i = 0; i < specialLen; i++) root[i] = special[i];
         for (let i = 0; i < rootIdsLen; i++) root[specialLen + i] = rootIds[i];
+        // Build Set for O(1) lookups
+        rootSet = new Set(root);
         verifyColumns();
         await renderColumns();
     }
