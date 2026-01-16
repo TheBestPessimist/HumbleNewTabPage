@@ -1347,14 +1347,15 @@ function removeRow(xpos, ypos) {
 // refresh recently closed tab lists
 function refreshClosed() {
     const targets = [];
-    const folders = [...document.getElementsByClassName('closed')];
+    const folders = document.getElementsByClassName('closed');
 
-    folders.forEach(a => {
+    for (let i = 0, len = folders.length; i < len; i++) {
+        const a = folders[i];
         if (a.nextSibling) {
             a.nextSibling.remove();
             targets.push(a.parentNode);
         }
-    });
+    }
 
     if (folders.length === 0 && coords.closed) {
         const target = document.getElementsByClassName('column')[coords.closed.x];
