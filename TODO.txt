@@ -11,6 +11,8 @@ More hints:
 - as this is  an ongoing process, continue with the next batch of papercut fixes. Check the git commit and resume where you left off. (ie: if last commit's papercut was #51, then you continue with #52)
 - FOR EVERY INDIVIDUAL PAPERCUT FIXED, i want you to MAKE A COMMIT explaining what was changed and how it improved the code or the performance. Keep the number of words in the commit message under 100 characters
 - DO NOT STOP until you've fixed at least 50
+- do not pollute the code with needless or obvious comments. Cleanup redundant comments if they exists as well
+- think VERY HARD before making a change: does it improve something, or is it just change for the sake of change?
 - focus on performance:
     - Reducing DOM operations
     - Caching expensive lookups
