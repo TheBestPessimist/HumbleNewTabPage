@@ -1760,8 +1760,8 @@ document.addEventListener('keypress', e => {
     }
 });
 
-document.addEventListener('mousedown', () => document.body.classList.add('hide-focus'));
-document.addEventListener('keydown', () => document.body.classList.remove('hide-focus'));
+document.addEventListener('mousedown', () => document.body.classList.add('hide-focus'), {passive: true});
+document.addEventListener('keydown', () => document.body.classList.remove('hide-focus'), {passive: true});
 
 window.onresize = updateTooltips;
 
