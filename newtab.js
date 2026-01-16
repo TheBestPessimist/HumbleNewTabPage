@@ -106,10 +106,12 @@ const Perf = {
         const scriptResources = resources.filter(r => r.name.includes('.js'));
         if (scriptResources.length > 0) {
             console.log('\n📜 SCRIPT LOADING:');
-            scriptResources.forEach(r => {
-                const name = r.name.split('/').pop();
+            // Use for loop for better performance
+            for (let i = 0, len = scriptResources.length; i < len; i++) {
+                const r = scriptResources[i];
+                const name = r.name.split('/').at(-1); // Modern way to get last element
                 console.log(`  ${name}: start=${r.startTime.toFixed(1)}ms, duration=${r.duration.toFixed(1)}ms`);
-            });
+            }
         }
 
         // Timeline
