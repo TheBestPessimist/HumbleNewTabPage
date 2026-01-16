@@ -1760,12 +1760,15 @@ function initSettings() {
         // load themes
         const themeSelect = document.getElementById('options_theme');
         if (themeSelect.childNodes.length === 0) {
-            Object.keys(themes).forEach(name => {
+            const themeNames = Object.keys(themes);
+            const currentTheme = getConfig('theme');
+            for (let i = 0, len = themeNames.length; i < len; i++) {
+                const name = themeNames[i];
                 const option = document.createElement('option');
                 option.textContent = name;
-                option.selected = name === getConfig('theme');
-                themeSelect.appendChild(option);
-            });
+                option.selected = name === currentTheme;
+                themeSelect.append(option);
+            }
         }
 
         // load font list
