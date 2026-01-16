@@ -1,0 +1,10 @@
+
+
+- [ ] performance: We are doing an ongoing process where we take a 'papercuts' style approach where we find little things that can improve the performance of the extension throughout the whole codebase, then fix each of them, one by one. Find a papercut, fix it, then commit. More explanations below:
+The following are non-negotiable constraints:
+- must support ALL 10_000 of my bookmarks
+- must show all open bookmarks folders, no matter if a single folder has 5000 bookmarks
+- must be FAST in doing its job (otherwise this extension will be useless)
+For every individual papercut fixed, i want you to make a commit explaining what was changed and how it improved. Keep the number of words in the commit message under 100.
+DO NOT STOP until you've fixed at least 50.
+As this is  an ongoing process, continue with the next batch of papercut fixes. Check the git commit and resume where you left off. (ie: if last commit's papercut was #51, then you continue with #52)

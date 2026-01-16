@@ -13,7 +13,7 @@ const FaviconCache = {
         img.height = size;
         img.loading = 'lazy';
         img.decoding = 'async';
-        img.src = '/_favicon/?pageUrl=' + encodeURIComponent(pageUrl) + '&size=' + size;
+        img.src = `/_favicon/?pageUrl=${encodeURIComponent(pageUrl)}&size=${size}`;
         return img;
     }
 };
