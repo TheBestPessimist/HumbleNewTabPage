@@ -117,12 +117,13 @@ const Perf = {
         // Timeline
         console.log('\n📍 TIMELINE (marks):');
         let prev = this.startTime;
-        this.marks.forEach(m => {
+        for (let i = 0, len = this.marks.length; i < len; i++) {
+            const m = this.marks[i];
             const delta = m.time - prev;
             const bar = '█'.repeat(Math.min(Math.ceil(delta / 10), 50));
             console.log(`  ${m.elapsed.toFixed(1).padStart(7)}ms | ${bar} +${delta.toFixed(1)}ms | ${m.label}`);
             prev = m.time;
-        });
+        }
 
         // Slow operations (>5ms) - use toSorted for non-mutating sort
         const slowOps = this.operations.filter(o => o.duration > 5).toSorted((a, b) => b.duration - a.duration);
