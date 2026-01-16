@@ -1627,20 +1627,22 @@ function initSettings() {
     const nav = document.getElementById('options_nav');
     let currentIndex = 0;
 
-    [...nav.children].forEach((li, i) => {
-        const a = li.firstChild;
+    const sections = options.getElementsByClassName('section');
+    const navChildren = nav.children;
+    for (let i = 0, len = navChildren.length; i < len; i++) {
+        const a = navChildren[i].firstChild;
         a.onclick = function () {
             // clear current style
-            nav.children[currentIndex].firstChild.classList.remove('current');
-            options.getElementsByClassName('section')[currentIndex].classList.remove('current');
+            navChildren[currentIndex].firstChild.classList.remove('current');
+            sections[currentIndex].classList.remove('current');
 
             // apply new current style
             currentIndex = i;
-            nav.children[currentIndex].firstChild.classList.add('current');
-            options.getElementsByClassName('section')[currentIndex].classList.add('current');
+            navChildren[currentIndex].firstChild.classList.add('current');
+            sections[currentIndex].classList.add('current');
 
             // show custom css on advanced tab
-            if (currentIndex === nav.children.length - 1) {
+            if (currentIndex === len - 1) {
                 const allcss = document.getElementById('all_css');
                 allcss.value = Object.keys(config)
                     .map(k => getStyle(k, getConfig(k)))
@@ -1649,7 +1651,7 @@ function initSettings() {
             }
 
             // import/export
-            if (currentIndex === nav.children.length - 2) {
+            if (currentIndex === len - 2) {
                 const exports = document.getElementById('options_export');
                 const imports = document.getElementById('options_import');
                 const replacer = (k, v) =>
@@ -1677,7 +1679,7 @@ function initSettings() {
             }
             return false;
         };
-    });
+    }
 
     // add options to hide bookmark folders (load from cache)
     BookmarkCache.getFolder('0').then(async rootFolder => {
