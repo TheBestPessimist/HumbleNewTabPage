@@ -18,9 +18,10 @@ importScripts('bookmark-cache.js');
 // Sync state
 let syncInProgress = false;
 let lastSyncAttempt = 0;
-const SYNC_DEBOUNCE_MS = 1000; // Debounce rapid bookmark changes
-const HOURLY_SYNC_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
-const SESSIONS_DEBOUNCE_MS = 10 * 1000; // 10 seconds debounce for session changes
+const SYNC_DEBOUNCE_MS = 1000;
+const BOOKMARK_SYNC_MINUTES = 60;
+const HOURLY_SYNC_INTERVAL_MS = BOOKMARK_SYNC_MINUTES * 60 * 1000;
+const SESSIONS_DEBOUNCE_MS = 10_000;
 let sessionsSyncTimeout = null;
 
 /**
@@ -215,7 +216,7 @@ const SESSIONS_ALARM_NAME = 'sessions-cache-sync';
 
 // Create alarms
 chrome.alarms.create(BOOKMARK_ALARM_NAME, {
-    periodInMinutes: 60 // Hourly for bookmarks
+    periodInMinutes: BOOKMARK_SYNC_MINUTES
 });
 
 chrome.alarms.create(SESSIONS_ALARM_NAME, {
