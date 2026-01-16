@@ -1353,7 +1353,10 @@ function refreshClosed() {
     }
 
     getChildren({id: 'closed'}).then(result => {
-        targets.forEach(target => renderAll(result, target));
+        // Use for loop for better performance
+        for (let i = 0, len = targets.length; i < len; i++) {
+            renderAll(result, targets[i]);
+        }
     });
 }
 
