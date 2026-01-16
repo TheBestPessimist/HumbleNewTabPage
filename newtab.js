@@ -106,7 +106,7 @@ const Perf = {
         const scriptResources = [];
         for (let i = 0, len = resources.length; i < len; i++) {
             const r = resources[i];
-            if (r.name.includes('.js')) scriptResources.push(r);
+            if (r.name.endsWith('.js')) scriptResources.push(r);
         }
         if (scriptResources.length > 0) {
             console.log('\n📜 SCRIPT LOADING:');
