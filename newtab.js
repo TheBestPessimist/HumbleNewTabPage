@@ -112,8 +112,8 @@ const Perf = {
             console.log('\n📜 SCRIPT LOADING:');
             for (let i = 0, len = scriptResources.length; i < len; i++) {
                 const r = scriptResources[i];
-                const parts = r.name.split('/');
-                const name = parts[parts.length - 1]; // Direct index access faster than .at()
+                const lastSlash = r.name.lastIndexOf('/');
+                const name = lastSlash >= 0 ? r.name.slice(lastSlash + 1) : r.name;
                 console.log(`  ${name}: start=${r.startTime.toFixed(1)}ms, duration=${r.duration.toFixed(1)}ms`);
             }
         }
