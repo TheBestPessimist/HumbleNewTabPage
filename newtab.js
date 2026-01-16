@@ -179,8 +179,12 @@ const Perf = {
         if (this.apiCalls.totalTime > 100) {
             console.log(`  ⚠️  Chrome APIs taking ${this.apiCalls.totalTime.toFixed(0)}ms`);
         }
-        const renderOps = this.operations.filter(o => o.label.includes('render'));
-        const renderTime = renderOps.reduce((sum, o) => sum + o.duration, 0);
+        // Calculate render time with single loop (faster than filter+reduce)
+        let renderTime = 0;
+        for (let i = 0, len = this.operations.length; i < len; i++) {
+            const o = this.operations[i];
+            if (o.label.includes('render')) renderTime += o.duration;
+        }
         if (renderTime > 50) {
             console.log(`  ⚠️  Rendering taking ${renderTime.toFixed(0)}ms`);
         }
