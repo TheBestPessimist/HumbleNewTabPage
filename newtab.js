@@ -1179,8 +1179,14 @@ function verifyColumns() {
         columns.push(defaultColumn);
     }
 
-    // find missing root items
-    const existing = new Set(columns.flat());
+    // find missing root items - build existing set with nested loops (faster than flat())
+    const existing = new Set();
+    for (let x = 0, xLen = columns.length; x < xLen; x++) {
+        const col = columns[x];
+        for (let y = 0, yLen = col.length; y < yLen; y++) {
+            existing.add(col[y]);
+        }
+    }
     const missing = [];
     for (let i = 0, len = root.length; i < len; i++) {
         const id = root[i];
