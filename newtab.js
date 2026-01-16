@@ -1167,7 +1167,7 @@ function animate(node, a, isopen) {
     } else {
         // start animation
         Object.assign(wrap.style, {
-            height: isopen ? inner.clientHeight + 'px' : '0',
+            height: isopen ? `${inner.clientHeight}px` : '0',
             opacity: isopen ? '1' : '0'
         });
     }
@@ -1177,7 +1177,7 @@ function animate(node, a, isopen) {
             if (wrap) {
                 wrap.className = 'wrap';
                 Object.assign(wrap.style, {
-                    height: isopen ? '0' : inner.clientHeight + 'px',
+                    height: isopen ? '0' : `${inner.clientHeight}px`,
                     opacity: isopen ? '0' : '1',
                     pointerEvents: isopen ? 'none' : null
                 });
