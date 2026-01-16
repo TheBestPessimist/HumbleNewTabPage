@@ -1540,7 +1540,7 @@ function loadSettings() {
     Perf.mark('loadSettings start');
     // Remove early-styles.js overrides so new settings can take effect
     document.getElementById('early-styles')?.remove();
-    theme = themes[getConfig('theme')] || {};
+    theme = themes[getConfig('theme')] ?? {};
     Object.keys(config).forEach(key => {
         if (key === 'background_image_file') {
             setTimeout(() => onChange('background_image_file'), 0);
