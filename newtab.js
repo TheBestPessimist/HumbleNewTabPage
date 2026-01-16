@@ -1713,7 +1713,11 @@ function initSettings() {
     BookmarkCache.getFolder('0').then(async rootFolder => {
         const placeholder = document.getElementById('options_show_bookmarks');
         const children = rootFolder?.children || [];
-        children.filter(c => c.isFolder).forEach(node => {
+        // Use for loop for better performance
+        for (let i = 0, len = children.length; i < len; i++) {
+            const node = children[i];
+            if (!node.isFolder) continue;
+
             const key = `show_${node.id}`;
             config[key] = 1;
 
@@ -1725,10 +1729,9 @@ function initSettings() {
             input.id = `options_${key}`;
 
             const label = document.createElement('label');
-            label.appendChild(span);
-            label.appendChild(input);
-            placeholder.appendChild(label);
-        });
+            label.append(span, input); // append multiple elements at once
+            placeholder.append(label);
+        }
 
         // replace text input with system font list
         if (chrome.fontSettings) {
