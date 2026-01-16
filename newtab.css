@@ -45,9 +45,8 @@ body {
 	padding: 0 .8em;
 	border-radius: .2em;
 	cursor: pointer;
-	transition-property: color, background-color, box-shadow, opacity;
-	transition-duration: 0.2s;
-	transition-timing-function: ease-out;
+	/* Use shorthand transition property */
+	transition: color 0.2s ease-out, background-color 0.2s ease-out, box-shadow 0.2s ease-out, opacity 0.2s ease-out;
 }
 #main a:hover {
 	color: #000;
