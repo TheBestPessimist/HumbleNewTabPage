@@ -122,8 +122,8 @@ const Perf = {
             prev = m.time;
         });
 
-        // Slow operations (>5ms)
-        const slowOps = this.operations.filter(o => o.duration > 5).sort((a, b) => b.duration - a.duration);
+        // Slow operations (>5ms) - use toSorted for non-mutating sort
+        const slowOps = this.operations.filter(o => o.duration > 5).toSorted((a, b) => b.duration - a.duration);
         if (slowOps.length > 0) {
             console.log('\n🐌 SLOW OPERATIONS (>5ms):');
             slowOps.forEach(o => {
@@ -134,7 +134,7 @@ const Perf = {
         // IndexedDB cache breakdown
         if (this.cacheCalls.calls.length > 0) {
             console.log('\n💾 INDEXEDDB CACHE CALLS:');
-            const sorted = [...this.cacheCalls.calls].sort((a, b) => b.duration - a.duration);
+            const sorted = this.cacheCalls.calls.toSorted((a, b) => b.duration - a.duration);
             sorted.forEach(c => {
                 const bar = '█'.repeat(Math.min(Math.ceil(c.duration / 10), 50));
                 console.log(`  ${c.duration.toFixed(1).padStart(7)}ms | ${bar} | ${c.api}`);
@@ -144,7 +144,7 @@ const Perf = {
         // Chrome API breakdown
         if (this.apiCalls.calls.length > 0) {
             console.log('\n🔌 CHROME API CALLS (special folders only, after first paint):');
-            const sorted = [...this.apiCalls.calls].sort((a, b) => b.duration - a.duration);
+            const sorted = this.apiCalls.calls.toSorted((a, b) => b.duration - a.duration);
             sorted.forEach(c => {
                 const bar = '█'.repeat(Math.min(Math.ceil(c.duration / 10), 50));
                 console.log(`  ${c.duration.toFixed(1).padStart(7)}ms | ${bar} | ${c.api}`);
