@@ -310,6 +310,129 @@ describe('newtab.js', () => {
         });
     });
 
+    describe('folder click handlers', () => {
+        test('middle-click on folder opens all bookmarks in BACKGROUND tabs and prevents auto-scroll', async () => {
+            const { render } = require('../newtab.js');
+
+            // Track chrome.tabs.create calls - must open with active: false for background
+            const createdTabs = [];
+            global.chrome.tabs.create = (options) => {
+                createdTabs.push(options);
+                return Promise.resolve({ id: createdTabs.length });
+            };
+
+            // Create a folder with children already loaded
+            const folderNode = {
+                id: '10',
+                title: 'Folder A',
+                children: [
+                    { id: '100', title: 'Nested 1', url: 'https://nested1.com' },
+                    { id: '101', title: 'Nested 2', url: 'https://nested2.com' }
+                ]
+            };
+
+            const ul = document.createElement('ul');
+            render(folderNode, ul);
+
+            const folderLink = ul.querySelector('a');
+            expect(folderLink).toBeTruthy();
+
+            // Middle-click uses mousedown (not auxclick) to prevent auto-scroll
+            const mousedownEvent = new MouseEvent('mousedown', { button: 1, cancelable: true });
+            folderLink.dispatchEvent(mousedownEvent);
+
+            // CRITICAL: Must prevent default to stop auto-scroll behavior
+            expect(mousedownEvent.defaultPrevented).toBe(true);
+
+            // Wait for async openLinks to complete
+            await new Promise(r => setTimeout(r, 50));
+
+            // CRITICAL: Tabs must be opened in background (active: false)
+            expect(createdTabs).toHaveLength(2);
+            expect(createdTabs[0]).toEqual({ url: 'https://nested1.com', active: false });
+            expect(createdTabs[1]).toEqual({ url: 'https://nested2.com', active: false });
+        });
+
+        test('Ctrl+click on folder opens all bookmarks in BACKGROUND tabs', async () => {
+            const { render } = require('../newtab.js');
+
+            // Track chrome.tabs.create calls - must open with active: false for background
+            const createdTabs = [];
+            global.chrome.tabs.create = (options) => {
+                createdTabs.push(options);
+                return Promise.resolve({ id: createdTabs.length });
+            };
+
+            // Create a folder with children already loaded
+            const folderNode = {
+                id: '10',
+                title: 'Folder A',
+                children: [
+                    { id: '100', title: 'Nested 1', url: 'https://nested1.com' },
+                    { id: '101', title: 'Nested 2', url: 'https://nested2.com' }
+                ]
+            };
+
+            const ul = document.createElement('ul');
+            render(folderNode, ul);
+
+            const folderLink = ul.querySelector('a');
+            expect(folderLink).toBeTruthy();
+
+            // Simulate Ctrl+click
+            const ctrlClickEvent = new MouseEvent('click', { ctrlKey: true, bubbles: true });
+            folderLink.dispatchEvent(ctrlClickEvent);
+
+            // Wait for async openLinks to complete
+            await new Promise(r => setTimeout(r, 50));
+
+            // CRITICAL: Tabs must be opened in background (active: false)
+            expect(createdTabs).toHaveLength(2);
+            expect(createdTabs[0]).toEqual({ url: 'https://nested1.com', active: false });
+            expect(createdTabs[1]).toEqual({ url: 'https://nested2.com', active: false });
+        });
+
+        test('regular click on folder toggles it (does not open links)', async () => {
+            const { render } = require('../newtab.js');
+
+            // Track window.open calls
+            const openedUrls = [];
+            global.window.open = (url) => { openedUrls.push(url); };
+
+            // Create a folder with children already loaded
+            const folderNode = {
+                id: '10',
+                title: 'Folder A',
+                children: [
+                    { id: '100', title: 'Nested 1', url: 'https://nested1.com' },
+                    { id: '101', title: 'Nested 2', url: 'https://nested2.com' }
+                ]
+            };
+
+            const ul = document.createElement('ul');
+            render(folderNode, ul);
+
+            const folderLink = ul.querySelector('a');
+            expect(folderLink).toBeTruthy();
+
+            // Folder should start closed
+            expect(folderLink.open).toBeFalsy();
+
+            // Simulate regular click (no Ctrl)
+            const clickEvent = new MouseEvent('click', { bubbles: true });
+            folderLink.dispatchEvent(clickEvent);
+
+            // Wait for toggle to complete
+            await new Promise(r => setTimeout(r, 50));
+
+            // Folder should now be open
+            expect(folderLink.open).toBe(true);
+
+            // No links should have been opened
+            expect(openedUrls).toHaveLength(0);
+        });
+    });
+
     describe('expandDeferredFolders', () => {
         // Note: This test is skipped because render() requires full module initialization
         // (coords, columns, root variables) which happens during the main page load.
