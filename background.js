@@ -47,9 +47,7 @@ async function triggerSync(reason) {
     syncInProgress = true;
 
     try {
-        console.log(`[BookmarkCache] Starting sync (reason: ${reason})`);
-        const result = await BookmarkCache.fullSync();
-        console.log(`[BookmarkCache] Sync complete: ${result.folderCount} folders in ${result.syncTime.toFixed(0)}ms`);
+        await BookmarkCache.fullSync();
     } catch (error) {
         console.error(`[BookmarkCache] Sync failed:`, error);
     } finally {

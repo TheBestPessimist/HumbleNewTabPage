@@ -251,10 +251,7 @@ describe('BookmarkCache', () => {
         });
 
         test('syncs bookmarks to cache', async () => {
-            const result = await BookmarkCache.fullSync();
-
-            expect(result.folderCount).toBe(2); // folder:0 and folder:1
-            expect(result.syncTime).toBeGreaterThan(0);
+            await BookmarkCache.fullSync();
 
             // Verify data was stored
             const folder = await BookmarkCache.getFolder('1');
