@@ -433,6 +433,51 @@ describe('newtab.js', () => {
         });
     });
 
+    describe('openLink', () => {
+        test('opens chrome:// URLs using chrome.tabs.create with active: true for foreground tabs', async () => {
+            const { openLink } = require('../newtab.js');
+
+            // Track chrome.tabs.create calls
+            const createdTabs = [];
+            global.chrome.tabs.create = (options) => {
+                createdTabs.push(options);
+                return Promise.resolve({ id: createdTabs.length });
+            };
+
+            // Track window.open calls (should NOT be used for chrome:// URLs)
+            const windowOpenCalls = [];
+            global.window.open = (url, target) => {
+                windowOpenCalls.push({ url, target });
+            };
+
+            // Open a chrome:// URL in foreground tab (newtab=1)
+            // This is what "Edit bookmarks" does
+            openLink({ url: 'chrome://bookmarks/?id=10' }, 1);
+
+            // Should use chrome.tabs.create, NOT window.open
+            expect(createdTabs).toHaveLength(1);
+            expect(createdTabs[0]).toEqual({ url: 'chrome://bookmarks/?id=10', active: true });
+            expect(windowOpenCalls).toHaveLength(0);
+        });
+
+        test('opens chrome:// URLs using chrome.tabs.create with active: false for background tabs', async () => {
+            const { openLink } = require('../newtab.js');
+
+            // Track chrome.tabs.create calls
+            const createdTabs = [];
+            global.chrome.tabs.create = (options) => {
+                createdTabs.push(options);
+                return Promise.resolve({ id: createdTabs.length });
+            };
+
+            // Open a chrome:// URL in background tab (newtab=2)
+            openLink({ url: 'chrome://settings/clearBrowserData' }, 2);
+
+            expect(createdTabs).toHaveLength(1);
+            expect(createdTabs[0]).toEqual({ url: 'chrome://settings/clearBrowserData', active: false });
+        });
+    });
+
     describe('expandDeferredFolders', () => {
         // Note: This test is skipped because render() requires full module initialization
         // (coords, columns, root variables) which happens during the main page load.

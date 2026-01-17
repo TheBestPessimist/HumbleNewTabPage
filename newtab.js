@@ -935,8 +935,8 @@ function openLink(node, newtab) {
         chrome.tabs.create({url, active: false});
         return;
     }
-    if (newtab) {
-        window.open(url, '_blank');
+    if (newtab === 1) {
+        chrome.tabs.create({url, active: true});
         return;
     }
     window.location.href = url;
@@ -1629,6 +1629,7 @@ if (typeof module !== 'undefined' && module.exports) {
         special,
         expandDeferredFolders,
         render,
-        renderAll
+        renderAll,
+        openLink
     };
 }
