@@ -417,10 +417,22 @@ async function expandDeferredFolders() {
 
 // enables click and context menu for given folder
 function addFolderHandlers(node, a) {
-    // click handler
-    a.onclick = () => {
-        toggle(node, a);
+    // click handler - Ctrl+click opens all bookmarks in folder
+    a.onclick = e => {
+        if (e.ctrlKey) {
+            openLinks(node);
+        } else {
+            toggle(node, a);
+        }
         return false;
+    };
+
+    // middle-click opens all bookmarks in folder (must use mousedown to prevent auto-scroll)
+    a.onmousedown = e => {
+        if (e.button === 1) {
+            e.preventDefault();
+            openLinks(node);
+        }
     };
 
     // context menu handler
@@ -915,9 +927,14 @@ async function openLinks(node) {
 }
 
 // opens given node
+// newtab: 0 = current tab, 1 = new foreground tab, 2 = new background tab
 function openLink(node, newtab) {
     const {url} = node;
     if (!url) return;
+    if (newtab === 2) {
+        chrome.tabs.create({url, active: false});
+        return;
+    }
     if (newtab) {
         window.open(url, '_blank');
         return;
