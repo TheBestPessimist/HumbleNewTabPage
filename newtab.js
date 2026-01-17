@@ -1,5 +1,12 @@
 'use strict';
 
+// Tab open mode enum
+const TAB_OPEN_MODE = Object.freeze({
+    CURRENT: 0,
+    FOREGROUND: 1,
+    BACKGROUND: 2
+});
+
 // =============================================================================
 // SPECIAL FOLDERS - Unified handling for top sites, recent, closed, devices
 // =============================================================================
@@ -228,9 +235,9 @@ function render(node, target) {
     if (node.action) {
         a.onclick = node.action;
     } else if (url) {
-        if (newtab === 1) {
+        if (newtab === TAB_OPEN_MODE.FOREGROUND) {
             a.target = '_blank';
-        } else if (newtab === 2) {
+        } else if (newtab === TAB_OPEN_MODE.BACKGROUND) {
             a.onclick = () => {
                 openLink(node, newtab);
                 return false;
@@ -241,12 +248,12 @@ function render(node, target) {
         const firstChar = url.charCodeAt(0);
         if (firstChar === 99 || firstChar === 102) { // 'c' or 'f'
             a.onclick = e => {
-                openLink(node, newtab || (e.ctrlKey ? 2 : 0));
+                openLink(node, newtab || (e.ctrlKey ? TAB_OPEN_MODE.BACKGROUND : TAB_OPEN_MODE.CURRENT));
                 return false;
             };
             a.onauxclick = e => {
                 if (e.button === 1) {
-                    openLink(node, 2);
+                    openLink(node, TAB_OPEN_MODE.BACKGROUND);
                     return false;
                 }
             };
@@ -355,6 +362,7 @@ async function renderColumn(index, target) {
 
 // Cached DOM element references (avoid repeated getElementById calls)
 let mainElement = null;
+
 function getMainElement() {
     return mainElement ??= document.getElementById('main');
 }
@@ -498,11 +506,11 @@ function addColumnHandlers(index, ul) {
 function getMenuItems(node) {
     const items = [{label: 'Open all links in folder', action: () => openLinks(node)}];
     if (node.id === 'closed')
-        items.push({label: 'Clear browsing data', action: () => openLink({url: `chrome://settings/clearBrowserData`}, 1)});
+        items.push({label: 'Clear browsing data', action: () => openLink({url: `chrome://settings/clearBrowserData`}, TAB_OPEN_MODE.FOREGROUND)});
     if (node.id === 'devices')
-        items.push({label: 'History', action: () => openLink({url: `chrome://history`}, 1)});
+        items.push({label: 'History', action: () => openLink({url: `chrome://history`}, TAB_OPEN_MODE.FOREGROUND)});
     if (+node.id > 0)
-        items.push({label: 'Edit bookmarks', action: () => openLink({url: `chrome://bookmarks/?id=${node.id}`}, 1)});
+        items.push({label: 'Edit bookmarks', action: () => openLink({url: `chrome://bookmarks/?id=${node.id}`}, TAB_OPEN_MODE.FOREGROUND)});
     return items;
 }
 
@@ -922,20 +930,20 @@ function animate(node, a, isopen) {
 async function openLinks(node) {
     const result = await getChildren(node);
     for (let i = 0, len = result.length; i < len; i++) {
-        openLink(result[i], 2);
+        openLink(result[i], TAB_OPEN_MODE.BACKGROUND);
     }
 }
 
 // opens given node
-// newtab: 0 = current tab, 1 = new foreground tab, 2 = new background tab
-function openLink(node, newtab) {
+// mode: TAB.CURRENT, TAB.FOREGROUND, or TAB.BACKGROUND
+function openLink(node, mode) {
     const {url} = node;
     if (!url) return;
-    if (newtab === 2) {
+    if (mode === TAB_OPEN_MODE.BACKGROUND) {
         chrome.tabs.create({url, active: false});
         return;
     }
-    if (newtab === 1) {
+    if (mode === TAB_OPEN_MODE.FOREGROUND) {
         chrome.tabs.create({url, active: true});
         return;
     }
@@ -1620,6 +1628,7 @@ if (location.search === '?options') showOptions(true);
 // Export for testing
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
+        TAB: TAB_OPEN_MODE,
         getColumnIds: () => {
             const ids = [];
             forEachColumnEntry((x, y, id) => ids.push(id));

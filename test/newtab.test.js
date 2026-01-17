@@ -435,7 +435,7 @@ describe('newtab.js', () => {
 
     describe('openLink', () => {
         test('opens chrome:// URLs using chrome.tabs.create with active: true for foreground tabs', async () => {
-            const { openLink } = require('../newtab.js');
+            const { openLink, TAB } = require('../newtab.js');
 
             // Track chrome.tabs.create calls
             const createdTabs = [];
@@ -450,9 +450,9 @@ describe('newtab.js', () => {
                 windowOpenCalls.push({ url, target });
             };
 
-            // Open a chrome:// URL in foreground tab (newtab=1)
+            // Open a chrome:// URL in foreground tab
             // This is what "Edit bookmarks" does
-            openLink({ url: 'chrome://bookmarks/?id=10' }, 1);
+            openLink({ url: 'chrome://bookmarks/?id=10' }, TAB.FOREGROUND);
 
             // Should use chrome.tabs.create, NOT window.open
             expect(createdTabs).toHaveLength(1);
@@ -461,7 +461,7 @@ describe('newtab.js', () => {
         });
 
         test('opens chrome:// URLs using chrome.tabs.create with active: false for background tabs', async () => {
-            const { openLink } = require('../newtab.js');
+            const { openLink, TAB } = require('../newtab.js');
 
             // Track chrome.tabs.create calls
             const createdTabs = [];
@@ -470,8 +470,8 @@ describe('newtab.js', () => {
                 return Promise.resolve({ id: createdTabs.length });
             };
 
-            // Open a chrome:// URL in background tab (newtab=2)
-            openLink({ url: 'chrome://settings/clearBrowserData' }, 2);
+            // Open a chrome:// URL in background tab
+            openLink({ url: 'chrome://settings/clearBrowserData' }, TAB.BACKGROUND);
 
             expect(createdTabs).toHaveLength(1);
             expect(createdTabs[0]).toEqual({ url: 'chrome://settings/clearBrowserData', active: false });
