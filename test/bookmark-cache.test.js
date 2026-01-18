@@ -226,6 +226,45 @@ describe('BookmarkCache', () => {
             expect(nested).toBeDefined();
             expect(nested.value.parentId).toBe('1');
         });
+
+        test('normalizes Firefox root folder ID to 0', () => {
+            // Firefox uses 'root________' as the root folder ID
+            const firefoxTree = [{
+                id: 'root________',
+                title: '',
+                children: [
+                    {
+                        id: 'menu________',
+                        title: 'Bookmarks Menu',
+                        children: [
+                            { id: 'abc123', title: 'Site 1', url: 'https://example.com' }
+                        ]
+                    },
+                    {
+                        id: 'toolbar_____',
+                        title: 'Bookmarks Toolbar',
+                        children: []
+                    }
+                ]
+            }];
+
+            const records = BookmarkCache.flattenTree(firefoxTree);
+
+            // Root folder should be normalized to '0'
+            const root = records.find(r => r.key === 'folder:0');
+            expect(root).toBeDefined();
+            expect(root.value.id).toBe('0');
+            expect(root.value.children).toHaveLength(2);
+
+            // Child folders should keep their original IDs but have normalized parent
+            const menu = records.find(r => r.key === 'folder:menu________');
+            expect(menu).toBeDefined();
+            expect(menu.value.parentId).toBe('0');
+
+            const toolbar = records.find(r => r.key === 'folder:toolbar_____');
+            expect(toolbar).toBeDefined();
+            expect(toolbar.value.parentId).toBe('0');
+        });
     });
 
     describe('fullSync', () => {

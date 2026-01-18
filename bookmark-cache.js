@@ -298,7 +298,7 @@ const BookmarkCache = {
     flattenTree(tree) {
         const records = [];
 
-        function processNode(node, parentId = null) {
+        function processNode(node, parentId, id = node.id) {
             // Only process folders (nodes without url)
             if (!node.url) {
                 const nodeChildren = node.children || [];
@@ -316,9 +316,9 @@ const BookmarkCache = {
                 }
 
                 records.push({
-                    key: 'folder:' + node.id,
+                    key: 'folder:' + id,
                     value: {
-                        id: node.id,
+                        id: id,
                         title: node.title,
                         parentId: parentId,
                         children: children
@@ -329,16 +329,15 @@ const BookmarkCache = {
                 for (let i = 0; i < childLen; i++) {
                     const child = nodeChildren[i];
                     if (!child.url) {
-                        processNode(child, node.id);
+                        processNode(child, id);
                     }
                 }
             }
         }
 
-        // Process root nodes
-        for (let i = 0; i < tree.length; i++) {
-            const node = tree[i];
-            processNode(node);
+        // Process root with normalized ID '0' (Firefox uses 'root________', Chrome uses '0')
+        if (tree.length > 0) {
+            processNode(tree[0], null, '0');
         }
 
         return records;
