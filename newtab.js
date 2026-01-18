@@ -1201,7 +1201,7 @@ const config = {
     show_recent: 1,
     show_closed: 1,
     show_devices: 1,
-    show_root: 0,
+    show_root: 1,
     newtab: 0,
     remember_open: 1,
     auto_close: 0,
