@@ -12,8 +12,10 @@
  * The newtab.js page reads ONLY from the cache, never from chrome.bookmarks API.
  */
 
-// Import the bookmark cache module
-importScripts('bookmark-cache.js');
+// Import the bookmark cache module (service worker only - Firefox loads via manifest scripts array)
+if (typeof importScripts === 'function') {
+    importScripts('bookmark-cache.js');
+}
 
 // Sync state
 let syncInProgress = false;
@@ -97,7 +99,10 @@ chrome.bookmarks.onCreated.addListener(createBookmarkHandler('Bookmark created',
 chrome.bookmarks.onRemoved.addListener(createBookmarkHandler('Bookmark removed', 'bookmark-removed'));
 chrome.bookmarks.onChanged.addListener(createBookmarkHandler('Bookmark changed', 'bookmark-changed'));
 chrome.bookmarks.onMoved.addListener(createBookmarkHandler('Bookmark moved', 'bookmark-moved'));
-chrome.bookmarks.onChildrenReordered.addListener(createBookmarkHandler('Children reordered', 'children-reordered'));
+// onChildrenReordered is Chrome-only (not implemented in Firefox despite MDN docs)
+if (chrome.bookmarks.onChildrenReordered) {
+    chrome.bookmarks.onChildrenReordered.addListener(createBookmarkHandler('Children reordered', 'children-reordered'));
+}
 
 // =============================================================================
 // EXTENSION LIFECYCLE EVENTS
@@ -154,6 +159,10 @@ async function syncClosedTabs(reason) {
  * @param {string} reason - Why the sync was triggered
  */
 async function syncDevices(reason) {
+    // chrome.sessions.getDevices is Chrome-only (not supported in Firefox)
+    if (typeof chrome.sessions.getDevices !== 'function') {
+        return;
+    }
     try {
         const devices = await chrome.sessions.getDevices({ maxResults: 10 });
         const devLen = devices.length;

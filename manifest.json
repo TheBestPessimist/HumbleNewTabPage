@@ -24,7 +24,7 @@
 	],
 	"background": {
 		"service_worker": "background.js",
-		"scripts": ["background.js"]
+		"scripts": ["bookmark-cache.js", "background.js"]
 	},
 	"chrome_url_overrides": {
 		"newtab": "newtab.html"
