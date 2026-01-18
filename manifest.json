@@ -23,7 +23,8 @@
 		"file:///"
 	],
 	"background": {
-		"service_worker": "background.js"
+		"service_worker": "background.js",
+		"scripts": ["background.js"]
 	},
 	"chrome_url_overrides": {
 		"newtab": "newtab.html"
