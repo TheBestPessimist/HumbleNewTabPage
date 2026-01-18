@@ -822,7 +822,6 @@ function getIcon(node) {
     } else if (node.icon) {
         url = node.icon;
     } else if (node.url) {
-        // Use Chrome's built-in favicon cache
         const img = document.createElement('img');
         img.className = 'icon';
         img.alt = '';
@@ -830,7 +829,7 @@ function getIcon(node) {
         img.height = 16;
         img.loading = 'lazy';
         img.decoding = 'async';
-        img.src = `/_favicon/?pageUrl=${encodeURIComponent(node.url)}&size=16`;
+        img.src = Favicon.getUrl(node.url);
         return img;
     }
 
@@ -1209,7 +1208,8 @@ const config = {
     css: '',
     number_top: 10,
     number_closed: 10,
-    number_recent: 10
+    number_recent: 10,
+    favicon_provider: 'duckduckgo'
 };
 
 // themes is defined in themes.js (loaded before this script)
@@ -1584,6 +1584,26 @@ function initSettings() {
                 option.textContent = fontId;
                 option.selected = fontId === currentFont;
                 select.append(option);
+            }
+        }
+
+        // Initialize Firefox favicon provider options (only show on Firefox)
+        if (Favicon.isFirefox) {
+            const firefoxOptions = document.getElementById('firefox_options');
+            if (firefoxOptions) firefoxOptions.style.display = '';
+
+            const providerSelect = document.getElementById('options_favicon_provider');
+            if (providerSelect && providerSelect.childNodes.length === 0) {
+                const providers = Favicon.getProviderList();
+                const currentProvider = getConfig('favicon_provider');
+                for (let i = 0, len = providers.length; i < len; i++) {
+                    const p = providers[i];
+                    const option = document.createElement('option');
+                    option.value = p.key;
+                    option.textContent = p.name;
+                    option.selected = p.key === currentProvider;
+                    providerSelect.append(option);
+                }
             }
         }
     });

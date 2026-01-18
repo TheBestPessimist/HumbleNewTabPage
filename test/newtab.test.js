@@ -26,6 +26,10 @@ global.themes = themesModule || global.themes;
 const BookmarkCache = require('../bookmark-cache.js');
 global.BookmarkCache = BookmarkCache;
 
+// Load Favicon module
+const Favicon = require('../favicon.js');
+global.Favicon = Favicon;
+
 // Test bookmark data - this will be loaded into the real BookmarkCache
 const testBookmarkTree = [{
     id: '0',
